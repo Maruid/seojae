@@ -1,0 +1,97 @@
+/* 서재 Service Worker — 빌드 때 vite.config.js 가 __VERSION__ / __PRECACHE__ 를 채워 dist/sw.js 로 만듦
+ *   - 앱 화면(HTML·JS·CSS·아이콘): 미리 저장 → 인터넷 없어도 앱이 열림
+ *   - 글꼴: 한 번 받은 건 저장해 두고 뒤에서 새로 고침
+ *   - 본문(칼럼 .md · 소설 회차 .txt · 이미지): 열어 본 것만 저장 (seojae-content)
+ *       본문은 새로 받은 걸 우선, 실패하면 저장본 / 이미지는 저장본 우선
+ *       로그아웃·차단 시 앱이 seojae-content 를 지움
+ *   - 로그인·목록·읽기 기록(API)은 저장하지 않음 (앱이 따로 기기 캐시 사용)
+ */
+const VERSION = '__VERSION__';
+const SHELL = `seojae-shell-${VERSION}`;
+const CONTENT = 'seojae-content';
+const FONTS = 'seojae-fonts';
+const PRECACHE = __PRECACHE__;
+const CONTENT_MAX = 400;
+
+const scopeUrl = (p) => new URL(p, self.registration.scope).href;
+
+self.addEventListener('install', (e) => {
+  e.waitUntil(caches.open(SHELL).then((c) => c.addAll(PRECACHE.map(scopeUrl))));
+  // 새 버전은 사용자가 배너에서 "새로고침"을 누를 때 적용 (읽는 도중 화면이 바뀌지 않게)
+});
+
+self.addEventListener('activate', (e) => {
+  e.waitUntil((async () => {
+    for (const k of await caches.keys()) if (k.startsWith('seojae-shell-') && k !== SHELL) await caches.delete(k);
+    await self.clients.claim();
+  })());
+});
+
+self.addEventListener('message', (e) => {
+  if (e.data?.type === 'SKIP_WAITING') self.skipWaiting();
+});
+
+async function trim(cache, max) {
+  const keys = await cache.keys();
+  for (let i = 0; i < keys.length - max; i++) await cache.delete(keys[i]);
+}
+
+async function networkFirst(req, cacheName, key, timeout = 0) {
+  const cache = await caches.open(cacheName);
+  try {
+    const net = fetch(req);
+    const res = await (timeout ? Promise.race([net, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), timeout))]) : net);
+    if (res.ok) { cache.put(key, res.clone()); if (cacheName === CONTENT) trim(cache, CONTENT_MAX); }
+    return res;
+  } catch (err) {
+    const hit = await cache.match(key, { ignoreVary: true });
+    if (hit) return hit;
+    throw err;
+  }
+}
+
+async function cacheFirst(req, cacheName, key) {
+  const cache = await caches.open(cacheName);
+  const hit = await cache.match(key, { ignoreVary: true });
+  if (hit) return hit;
+  const res = await fetch(req);
+  if (res.ok || res.type === 'opaque') { cache.put(key, res.clone()); if (cacheName === CONTENT) trim(cache, CONTENT_MAX); }
+  return res;
+}
+
+async function staleWhileRevalidate(req, cacheName) {
+  const cache = await caches.open(cacheName);
+  const hit = await cache.match(req, { ignoreVary: true });
+  const net = fetch(req).then((res) => { if (res.ok || res.type === 'opaque') cache.put(req, res.clone()); return res; }).catch(() => hit);
+  return hit || net;
+}
+
+self.addEventListener('fetch', (e) => {
+  const req = e.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+
+  // 앱 화면
+  if (url.origin === self.location.origin) {
+    if (req.mode === 'navigate') {
+      e.respondWith(networkFirst(req, SHELL, scopeUrl('index.html'), 4000)
+        .catch(() => caches.match(scopeUrl('index.html'), { ignoreVary: true })));
+      return;
+    }
+    e.respondWith(caches.match(req, { ignoreVary: true }).then((hit) => hit || fetch(req)));   // 모듈 스크립트는 Origin 헤더가 달라 Vary 무시
+    return;
+  }
+
+  // 글꼴
+  if (/fonts\.(googleapis|gstatic)\.com$/.test(url.hostname) || (url.hostname === 'cdn.jsdelivr.net' && url.pathname.includes('pretendard'))) {
+    e.respondWith(staleWhileRevalidate(req, FONTS));
+    return;
+  }
+
+  // Supabase Storage (본문·이미지). 서명 토큰 등 주소 뒤 ?… 는 빼고 저장
+  if (url.pathname.includes('/storage/v1/object/')) {
+    const key = url.origin + url.pathname;
+    if (url.pathname.includes('/object/sign/')) e.respondWith(cacheFirst(req, CONTENT, key));
+    else e.respondWith(networkFirst(req, CONTENT, key, 8000));
+  }
+});

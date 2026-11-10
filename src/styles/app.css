@@ -311,3 +311,69 @@ body:has(.shell[data-immersive]) #toast { bottom: calc(24px + env(safe-area-inse
 .nv-next small { font-size: 12px; opacity: .75; }
 .nv-next strong { font-size: 16px; }
 .nv-last { margin: 0; color: var(--r-muted); font-size: 14px; }
+
+/* =====================================================================
+   관리 화면
+===================================================================== */
+.ad-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+@media (min-width: 768px) { .ad-stats { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+.ad-stats > div { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 2px; }
+.ad-stats b { font-size: 20px; }
+.ad-stats b small { font-size: 12px; font-weight: 400; color: var(--muted); }
+.ad-stats span { font-size: 12px; color: var(--muted); }
+.ad-stats .ad-bar { grid-column: span 3; gap: 6px; }
+@media (min-width: 768px) { .ad-stats .ad-bar { grid-column: span 5; } }
+@media (min-width: 1024px) { .ad-stats .ad-bar { grid-column: span 5; } }
+.ad-bar i { display: block; height: 6px; border-radius: 99px; background: var(--chip); overflow: hidden; }
+.ad-bar em { display: block; height: 100%; background: var(--ok); }
+.ad-bar em.is-warn { background: var(--accent); }
+
+.ad-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.ad-card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 12px; transition: opacity .15s; }
+.ad-card.is-busy { opacity: .6; pointer-events: none; }
+.ad-top { display: flex; align-items: flex-start; gap: 12px; }
+.ad-avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--chip); color: var(--muted); font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.ad-who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.ad-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ad-name em { font-style: normal; font-size: 11px; color: var(--accent-ink); background: var(--accent-soft); border-radius: 6px; padding: 1px 6px; margin-left: 4px; }
+.ad-mail { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ad-meta { font-size: 12px; color: var(--muted); }
+.ad-badge { flex-shrink: 0; font-size: 12px; font-weight: 700; border-radius: 99px; padding: 3px 9px; }
+.ad-badge.is-pending { background: var(--accent-soft); color: var(--accent-ink); }
+.ad-badge.is-ok { background: var(--ok-soft); color: var(--ok-ink); }
+.ad-badge.is-blocked { background: var(--chip); color: var(--muted); }
+.ad-badge.is-admin { background: var(--hero); color: var(--hero-ink); }
+.ad-more { position: relative; flex-shrink: 0; }
+.ad-dots { width: 36px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer; }
+@media (hover: hover) and (pointer: fine) { .ad-dots:hover { background: var(--chip); } }
+.ad-menu { position: absolute; right: 0; top: 36px; z-index: 5; min-width: 160px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.15); padding: 4px; display: flex; flex-direction: column; }
+.ad-menu button { height: 40px; border: 0; background: transparent; text-align: left; padding: 0 12px; border-radius: 8px; cursor: pointer; font-size: 14px; }
+.ad-menu button.is-danger { color: #C0392B; }
+@media (hover: hover) and (pointer: fine) { .ad-menu button:hover { background: var(--chip); } }
+.ad-grants { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 13px; }
+.ad-grants > span { color: var(--muted); margin-right: 4px; }
+.ad-chip { height: 34px; padding: 0 12px; border-radius: 99px; border: 1px solid var(--line); background: transparent; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; font-size: 13px; }
+.ad-chip.is-on { background: var(--ok-soft); border-color: var(--ok); color: var(--ok-ink); font-weight: 700; }
+.ad-chip:disabled { opacity: .45; cursor: default; }
+.ad-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ad-btn { height: 40px; padding: 0 18px; border-radius: 10px; border: 1px solid var(--line); background: transparent; cursor: pointer; font-size: 14px; }
+.ad-btn.is-main { background: var(--ink); color: var(--bg); border-color: var(--ink); font-weight: 700; }
+.ad-hint, .ad-note { font-size: 12px; color: var(--muted); margin: 0; }
+
+/* 확인 창 */
+.cf-root { position: fixed; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.cf-back { position: absolute; inset: 0; background: rgba(0,0,0,.4); }
+.cf-box { position: relative; width: min(100%, 380px); background: var(--surface); color: var(--ink); border-radius: 18px; padding: 20px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+.cf-box strong { font-size: 17px; }
+.cf-box p { margin: 0; font-size: 14px; line-height: 1.6; color: var(--muted); }
+.cf-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+.cf-btns button { height: 42px; padding: 0 18px; border-radius: 10px; border: 1px solid var(--line); background: transparent; cursor: pointer; font-size: 14px; }
+.cf-btns .is-main { background: var(--ink); color: var(--bg); border-color: var(--ink); font-weight: 700; }
+.cf-btns .is-danger { background: #C0392B; color: #fff; border-color: #C0392B; font-weight: 700; }
+
+/* 새 버전 배너 */
+.upd-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(84px + env(safe-area-inset-bottom)); z-index: 55; display: flex; align-items: center; gap: 12px;
+  background: var(--hero); color: var(--hero-ink); border-radius: 14px; padding: 10px 10px 10px 16px; font-size: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.25); width: max-content; max-width: calc(100vw - 32px); }
+.upd-bar button { height: 36px; padding: 0 14px; border-radius: 10px; border: 0; background: var(--accent); color: #fff; font-weight: 700; cursor: pointer; }
+.upd-bar .upd-x { background: transparent; color: var(--hero-muted); padding: 0 8px; }
+@media (min-width: 1024px) { .upd-bar { bottom: 28px; } }

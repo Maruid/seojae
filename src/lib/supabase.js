@@ -23,6 +23,7 @@ const MESSAGES = {
   NOT_FOUND: '대상을 찾을 수 없어요.',
   INVALID_STATUS: '잘못된 상태 값이에요.',
   INVALID_NAME: '이름은 1~40자로 입력해 주세요.',
+  CANNOT_CHANGE_SELF: '내 계정은 차단하거나 대기로 바꿀 수 없어요.',
 };
 
 export function errorMessage(err) {

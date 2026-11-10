@@ -15,6 +15,9 @@ import { renderColumn } from './views/column.js';
 import { renderNovels, renderNovel } from './views/novels.js';
 import { renderChapter } from './views/chapter.js';
 import { startReadingSync } from './lib/progress.js';
+import { renderAdmin } from './views/admin.js';
+import { renderInstall } from './views/install.js';
+import { initPwa } from './lib/pwa.js';
 
 // 앱 전역 상태
 const app = {
@@ -95,7 +98,14 @@ async function route(r) {
       app.cleanup = renderChapter(view, r.params.id, r.params.key);
       return;
     case 'admin':
-      return app.me.is_admin ? renderPlaceholder(view, r.name) : renderForbidden(view);
+      if (!app.me.is_admin) return renderForbidden(view);
+      app.cleanup = renderAdmin(view, app, {
+        onPendingChange: (n) => { if (app.pendingCount !== n) { app.pendingCount = n; app.redrawShell?.(); } },
+      });
+      return;
+    case 'install':
+      app.cleanup = renderInstall(view);
+      return;
     default:
       return renderPlaceholder(view, r.name);
   }
@@ -103,6 +113,7 @@ async function route(r) {
 
 async function boot() {
   applyPrefs();
+  initPwa();
   // 뒤로 가기 때 브라우저가 스크롤을 멋대로 옮기면 읽던 위치가 잘못 저장됨 → 직접 관리
   if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 
