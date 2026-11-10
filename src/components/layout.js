@@ -6,7 +6,7 @@ import { icon } from './icons.js';
 
 let shell = null;   // { root, content, nav, side }
 
-export function renderShell(app, routeName) {
+export function renderShell(app, routeName, { immersive = false, compact = false } = {}) {
   const tabs = tabsFor(app.me);
   const active = activeTab(tabs, routeName);
   const badge = (t) => (t.key === 'admin' && app.pendingCount
@@ -16,8 +16,8 @@ export function renderShell(app, routeName) {
   if (!shell) {
     const root = document.getElementById('app');
     mount(root, html`
-      <div class="min-h-dvh lg:flex">
-        <nav data-side aria-label="주 메뉴" class="hidden lg:flex lg:flex-col lg:gap-1 lg:w-[232px] lg:shrink-0 lg:sticky lg:top-0 lg:h-dvh lg:px-4 lg:py-6 lg:border-r lg:border-line lg:bg-surface"></nav>
+      <div class="shell min-h-dvh lg:flex">
+        <nav data-side aria-label="주 메뉴" class="hidden lg:flex lg:flex-col lg:gap-1 lg:shrink-0 lg:sticky lg:top-0 lg:h-dvh lg:px-4 lg:py-6 lg:border-r lg:border-line lg:bg-surface"></nav>
         <main data-content class="flex-1 min-w-0 pb-[calc(72px+env(safe-area-inset-bottom))] lg:pb-0"></main>
         <nav data-tabs aria-label="주 메뉴" class="lg:hidden fixed inset-x-0 bottom-0 z-30 bg-surface border-t border-line safe-bottom"></nav>
       </div>`);
@@ -34,7 +34,22 @@ export function renderShell(app, routeName) {
         </a>`)}
     </div>`);
 
-  mount(shell.side, html`
+  const shellEl = shell.root.firstElementChild;
+  if (immersive) shellEl.dataset.immersive = ''; else delete shellEl.dataset.immersive;
+  shell.side.style.width = compact ? '76px' : '232px';
+  shell.side.style.paddingLeft = shell.side.style.paddingRight = compact ? '12px' : '';
+
+  mount(shell.side, compact ? html`
+    <a href="#/" class="font-serif text-xl font-bold text-ink no-underline text-center pb-5" title="서재 홈">서재</a>
+    ${tabs.map((t) => html`
+      <a href="${t.href}" ${t.key === active ? html`aria-current="page"` : ''} title="${t.label}" aria-label="${t.label}"
+         class="relative h-12 rounded-[12px] flex items-center justify-center no-underline ${t.key === active ? 'bg-chip text-ink' : 'text-muted hover-mouse:bg-chip/60'}">
+        ${icon(t.icon, 22)}
+        ${t.key === 'admin' && app.pendingCount ? html`<span class="absolute top-1 right-1">${badge(t)}</span>` : ''}
+      </a>`)}
+    <div class="mt-auto pt-3 border-t border-line-soft flex justify-center">
+      <span class="w-8 h-8 rounded-full bg-chip text-muted font-bold text-[13px] flex items-center justify-center" title="${app.me?.profile?.display_name || ''}">${initial(app.me)}</span>
+    </div>` : html`
     <a href="#/" class="font-serif text-2xl font-bold text-ink no-underline px-3 pb-5">서재</a>
     ${tabs.map((t) => html`
       <a href="${t.href}" ${t.key === active ? html`aria-current="page"` : ''}

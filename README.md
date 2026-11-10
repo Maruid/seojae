@@ -67,6 +67,13 @@ insert into public.grants(user_id, sector)
   select user_id, 'columns' from public.profiles where email = 'friend@gmail.com';   -- 'novels' 도 필요하면 한 줄 더
 ```
 
+## 2단계 적용 순서 (한 번만)
+
+1. Supabase SQL Editor 에서 `supabase/migration_002_links_admin_guard.sql` 실행 (`columns.links` 추가, 관리자 자기 차단 방지)
+2. `seojae-sync` 폴더에서 새 `upload.py` 로 `python upload.py --dry-run` → `python upload.py`
+   (본문의 naver.me 단축 링크를 펼쳐 `links` 를 채움. 내용이 같은 글은 파일을 다시 올리지 않고 정보만 갱신)
+3. 이 저장소 push → Actions 배포
+
 ## 콘텐츠 업로드
 
 이 저장소가 아니라 로컬 `seojae-sync` 폴더의 `upload.py` 로 올립니다 (secret key 는 그 폴더 `.env` 에만).
@@ -77,12 +84,12 @@ insert into public.grants(user_id, sector)
 npm install
 cp .env.example .env.local   # publishable key 입력
 npm run dev                  # http://localhost:5173
-npm test                     # escape / 라우터 / 권한별 탭 테스트
+npm test                     # escape · 라우터 · 권한별 탭 · 본문 변환 · 보기 설정 테스트
 ```
 
 ## 진행 상황
 
 - [x] 1단계 골격: 로그인 → 승인 대기/차단 → 홈, 내 정보(화면 설정), 권한별 탭, 반응형 레이아웃, 배포
-- [ ] 2단계 칼럼: 목록 · 읽기 · 보기 설정 · 읽음 처리 · 자기 글 링크
+- [x] 2단계 칼럼: 목록 · 읽기 · 보기 설정 · 읽음 처리 · 자기 글 링크 (migration_002 필요)
 - [ ] 3단계 소설: 목록 · 회차 목록 · 읽기 · 다음 회차 미리 받기
 - [ ] 4단계 관리자 + PWA: 승인/권한 화면, 앱 설치, 오프라인 캐시

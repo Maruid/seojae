@@ -4,6 +4,7 @@ import { errorMessage } from '../lib/supabase.js';
 import { getPrefs, setPrefs } from '../lib/prefs.js';
 import { FONTS, APP_FONTS, loadFont } from '../lib/fonts.js';
 import { initial } from '../components/layout.js';
+import { canAccess } from '../lib/nav.js';
 
 const chip = (on) => `h-[38px] px-3 rounded-[10px] text-sm cursor-pointer ${on
   ? 'border border-ink bg-ink text-bg font-bold'
@@ -18,7 +19,7 @@ export function renderMe(view, app, { onNameChanged }) {
     const prof = app.me.profile || {};
     mount(view, html`
       <header class="h-16 px-5 lg:px-12 lg:pt-6 flex items-center">
-        <h1 class="m-0 font-serif text-[22px] font-bold">내 정보</h1>
+        <h1 class="m-0 text-[22px] font-bold">내 정보</h1>
       </header>
       <div class="px-5 lg:px-12 pb-10 max-w-[640px] flex flex-col gap-6">
         <div class="bg-surface border border-line rounded-2xl p-4 flex items-center gap-3.5">
@@ -49,7 +50,7 @@ export function renderMe(view, app, { onNameChanged }) {
               </div>
             </div>
             <div class="flex items-center justify-between gap-3">
-              <span class="flex flex-col gap-0.5">본문 글꼴과 같게<span class="text-xs text-muted">켜면 목록·메뉴도 읽기 화면에서 고른 글꼴로 (2단계에서 적용)</span></span>
+              <span class="flex flex-col gap-0.5">본문 글꼴과 같게<span class="text-xs text-muted">켜면 목록·메뉴도 읽기 화면 보기 설정의 글꼴로</span></span>
               <button type="button" role="switch" aria-checked="${p.sameAsBody}" aria-label="본문 글꼴과 같게" data-action="same"
                 class="relative w-12 h-7 shrink-0 rounded-full border-0 p-0 cursor-pointer ${p.sameAsBody ? 'bg-accent' : 'bg-line'}">
                 <span class="absolute top-[3px] ${p.sameAsBody ? 'left-[23px]' : 'left-[3px]'} w-[22px] h-[22px] rounded-full bg-white shadow"></span>
@@ -85,7 +86,7 @@ export function renderMe(view, app, { onNameChanged }) {
   onAction(view, {
     'edit-name'() { editing = true; draw(); view.querySelector('#name-input')?.focus(); },
     font(b) { setPrefs({ appFont: b.dataset.v, sameAsBody: false }); draw(); },
-    same() { setPrefs({ sameAsBody: !getPrefs().sameAsBody }); draw(); },
+    same() { setPrefs({ sameAsBody: !getPrefs().sameAsBody, sameScope: canAccess(app.me, 'column') ? 'column' : 'novel' }); draw(); },
     size(b) { setPrefs({ appSize: b.dataset.v }); draw(); },
     mode(b) { setPrefs({ mode: b.dataset.v }); draw(); },
     async logout() { await signOut(); location.hash = '#/login'; location.reload(); },

@@ -17,7 +17,7 @@ export function renderPending(root, app, { onRefresh }) {
         </div>
         <div class="flex-1 flex flex-col justify-center gap-7">
           <div class="flex flex-col gap-3">
-            <h1 class="m-0 font-serif text-[28px] font-bold leading-snug">${blocked ? '이용이 제한된 계정이에요' : '승인을 기다리고 있어요'}</h1>
+            <h1 class="m-0 text-[28px] font-bold leading-snug">${blocked ? '이용이 제한된 계정이에요' : '승인을 기다리고 있어요'}</h1>
             <p class="m-0 text-[15px] leading-7 text-muted">${blocked
               ? '관리자에게 문의해 주세요. 이 기기에 저장된 읽기 기록은 정리했어요.'
               : '관리자가 확인하면 읽을 수 있는 서재가 열려요. 승인되면 아래 버튼을 눌러 주세요.'}</p>

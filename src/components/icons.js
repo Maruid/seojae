@@ -16,7 +16,17 @@ const PATHS = {
   install: '<path d="M12 4v11"/><path d="M7.5 10.5L12 15l4.5-4.5"/><path d="M5 19h14"/>',
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
   search: '<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/>',
+  play: '<path d="M8 5.5v13l10-6.5z"/>',
+  pause: '<path d="M8.5 5v14M15.5 5v14"/>',
+  external: '<path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+  up: '<path d="M6 15l6-6 6 6"/>',
+  filter: '<path d="M4 6h16M7 12h10M10 18h4"/>',
 };
+
+// "가가" 보기 설정 버튼 (작은 가 + 큰 가)
+export const textSizeIcon = (size = 22) => trusted(
+  `<svg width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><text x="1" y="19" font-size="10" font-weight="700" font-family="system-ui,sans-serif">가</text><text x="9" y="19" font-size="15" font-weight="700" font-family="system-ui,sans-serif">가</text></svg>`
+);
 
 export const icon = (name, size, sw) => svg(PATHS[name] || '', size, sw);
 
