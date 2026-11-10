@@ -31,6 +31,56 @@ export function splitParagraphs(text) {
 // 회차 키 정렬·표시용
 export const chapterLabel = (c) => c.display_title || c.title || c.key;
 
+/**
+ * 회차 번호
+ *   - 프롤로그(intro) → null
+ *   - 제목에 번호가 있던 소설(키 n0012) → 그 번호 (빠진 회차가 있어도 실제 번호)
+ *   - 번호 소설 끝의 번호 없는 회차(키 x0001: 후기·외전 등) → null
+ *   - 번호가 없는 소설(키 s/p) → 등장 순서 (seq 는 프롤로그를 뺀 1부터)
+ */
+export function chapterNo(c) {
+  if (!c || c.key === 'intro') return null;
+  const m = /^n(\d+)$/.exec(c.key || '');
+  if (m) return +m[1];
+  if (/^x\d+$/.test(c.key || '')) return null;
+  return Number.isFinite(c.seq) && c.seq > 0 ? c.seq : null;
+}
+
+// 번호 칸과 함께 보여 줄 제목: 제목 앞의 "12화."·"제12화 -"·"12편 ·" 는 번호 칸과 겹치니 뗌
+export function chapterRest(c) {
+  const label = chapterLabel(c);
+  const no = chapterNo(c);
+  if (no == null) return label;
+  const re = new RegExp(`^\\s*(?:제\\s*)?0*${no}\\s*(?:화|편)\\s*[.:·\\-~)\\]]*\\s*`);
+  return label.replace(re, '').trim();
+}
+
+// 위 바·정보 팝업용 "12화" / "프롤로그" / (번호 없음) 제목
+export const chapterNoLabel = (c) => (c?.key === 'intro' ? '프롤로그' : chapterNo(c) != null ? `${chapterNo(c).toLocaleString()}화` : '');
+
+// 한 줄로: "12화 · 돌아왔다(12)" / "12화" / "프롤로그" / "후기"
+export function chapterTitleLine(c) {
+  const n = chapterNoLabel(c);
+  const rest = c?.key === 'intro' ? '' : chapterRest(c);
+  return n && rest ? `${n} · ${rest}` : n || rest || chapterLabel(c);
+}
+
+// 프롤로그를 뺀 회차 수
+export const chapterTotal = (chapters) => (chapters || []).filter((c) => c.key !== 'intro').length;
+
+// 회차 번호로 찾기: 정확히 있으면 그 회차, 없으면 가장 가까운 번호 (같으면 앞 번호)
+export function findChapterByNo(chapters, n) {
+  let exact = null; let near = null; let best = Infinity;
+  for (const c of chapters || []) {
+    const no = chapterNo(c);
+    if (no == null) continue;
+    if (no === n) { exact = c; break; }
+    const d = Math.abs(no - n);
+    if (d < best) { best = d; near = c; }
+  }
+  return { exact, near: exact ? null : near };
+}
+
 // 마지막으로 읽던 회차 → 이어 읽을 회차 (다 읽었으면 그다음 회차)
 export function continueTarget(chapters, readingByKey) {
   let best = null;

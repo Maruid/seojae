@@ -59,3 +59,25 @@ test('태그 정리 · 글꼴 두께', () => {
   assert.equal(resolveWeight('notoSerif', 'bold'), 600);
   assert.equal(resolveWeight('gowunDodum', 'bold'), null);
 });
+
+import { chapterNo, chapterRest, chapterNoLabel, chapterTotal, findChapterByNo } from '../src/lib/novelText.js';
+test('회차 번호: 제목 번호 우선, 없으면 순서, 프롤로그 제외', () => {
+  const list = [
+    { key: 'intro', seq: 0, display_title: '프롤로그' },
+    { key: 'n0001', seq: 1, display_title: '1화. 이게 뭐가 (1)' },
+    { key: 'n0003', seq: 2, display_title: '3화' },
+    { key: 'x0001', seq: 3, display_title: '후기' },
+  ];
+  assert.deepEqual(list.map(chapterNo), [null, 1, 3, null]);
+  assert.equal(chapterRest(list[1]), '이게 뭐가 (1)');
+  assert.equal(chapterRest(list[2]), '');
+  assert.equal(chapterNoLabel(list[0]), '프롤로그');
+  assert.equal(chapterNoLabel(list[3]), '');
+  assert.equal(chapterTotal(list), 3);
+  assert.equal(findChapterByNo(list, 3).exact.key, 'n0003');
+  assert.equal(findChapterByNo(list, 2).near.key, 'n0001');
+  const seq = [{ key: 'intro', seq: 0 }, { key: 's0001', seq: 1, display_title: '돌아왔다(1)' }, { key: 'p0002', seq: 2, display_title: '2편 · 그날 아침…' }];
+  assert.deepEqual(seq.map(chapterNo), [null, 1, 2]);
+  assert.equal(chapterRest(seq[1]), '돌아왔다(1)');
+  assert.equal(chapterRest(seq[2]), '그날 아침…');
+});

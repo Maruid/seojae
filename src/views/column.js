@@ -6,7 +6,8 @@ import { errorMessage } from '../lib/supabase.js';
 import { navigate } from '../router.js';
 import { loadColumns, cachedColumns, columnById, fetchMd, signImages, fmtDate } from '../lib/columns.js';
 import { loadReading, getReading, saveReading, statusOf } from '../lib/progress.js';
-import { getView } from '../lib/view.js';
+import { getView, setView } from '../lib/view.js';
+import { wantAwake } from '../lib/wakeLock.js';
 import { buildArticle, paintColors, lazyImages } from '../lib/reader-html.js';
 import { applyReaderTheme, resetReaderTheme, appDark } from '../lib/readerTheme.js';
 import { createSearch } from '../lib/search.js';
@@ -22,6 +23,9 @@ export { appDark };
 
 // 읽는 데 걸리는 시간 (한국어 1분에 약 500자)
 export const readMinutes = (chars) => Math.max(1, Math.round(chars / 500));
+// 글 → 글로 넘어갈 때는 바를 다시 띄우지 않음
+let lastLeave = 0;
+
 export const kChars = (n) => (n >= 10000 ? `${(n / 10000).toFixed(1).replace(/\.0$/, '')}만 자` : n >= 1000 ? `${Math.round(n / 1000)}천 자` : `${n}자`);
 
 export function renderColumn(view, app, id) {
@@ -44,6 +48,9 @@ export function renderColumn(view, app, id) {
   }
   const host = view.querySelector('[data-reader]');
   window.scrollTo(0, 0);
+  const quiet = Date.now() - lastLeave < 3000;
+  wantAwake('read', true);
+  cleanups.push(() => { wantAwake('read', false); wantAwake('auto', false); lastLeave = Date.now(); });
 
   const scope = 'column';
   let col = columnById(id);
@@ -107,7 +114,11 @@ export function renderColumn(view, app, id) {
     info,
     prev: navOf(neighbors.prev), next: navOf(neighbors.next), prevText: '이전 글', nextText: '다음 글',
     onSettings: () => openViewSettings({ scope, appDark, onChange: applyView }),
-    onAuto: () => ctrl?.toggleAuto(),
+    getSpeed: () => getView(scope).speed,
+    onAutoSpeed: (v) => setView(scope, { speed: v }),
+    onAutoStart: () => ctrl?.startAuto(),
+    onAutoStop: () => ctrl?.stopAuto(),
+    onAutoResume: () => ctrl?.resumeAuto(),
     onPin: () => ctrl?.setChrome(true),   // 고정을 바꾸면 지금은 보이는 상태로 맞춤
     onSeek: (p) => ctrl?.seek(p),
     onSearch: (q) => search?.run(q) || 0,
@@ -132,6 +143,10 @@ export function renderColumn(view, app, id) {
     if (!col) return;
     const read = statusOf(getReading('column', id)) === 'read';
     mount(endEl, html`
+      <div class="re-mark">글 끝</div>
+      ${neighbors.next ? html`
+        <a class="nv-next" href="#/c/${encodeURIComponent(neighbors.next.id)}">
+          <small>다음 글 ›</small><strong>${neighbors.next.title}</strong></a>` : ''}
       <div class="re-actions">
         <button type="button" class="re-btn ${read ? 'is-on' : ''}" data-action="toggleRead" aria-pressed="${String(read)}">
           ${icon('check', 18, 2.4)}${read ? '읽음' : '다 읽음으로 표시'}</button>
@@ -141,7 +156,6 @@ export function renderColumn(view, app, id) {
       ${(col.tags || []).length ? html`<div class="re-tags">${col.tags.map((t) => html`<span>#${t}</span>`)}</div>` : ''}
       <nav class="re-nav" aria-label="다른 글">
         ${neighbors.prev ? html`<a href="#/c/${encodeURIComponent(neighbors.prev.id)}"><small>‹ 이전 글</small><span>${neighbors.prev.title}</span></a>` : ''}
-        ${neighbors.next ? html`<a class="next" href="#/c/${encodeURIComponent(neighbors.next.id)}"><small>다음 글 ›</small><span>${neighbors.next.title}</span></a>` : ''}
       </nav>`);
   }
 
@@ -189,7 +203,9 @@ export function renderColumn(view, app, id) {
         getView: () => getView(scope),
         edges: () => chrome.edges(),
         isPinned: () => chrome.pinned,
-        onScrollNow: (p) => chrome.setProgress(p),
+        isBusy: () => chrome.busy,
+        justClosed: () => chrome.justClosed,
+        onScrollNow: (p, auto) => { chrome.setProgress(p); if (!auto) chrome.flashLine(); },
         onPosition(anchor, p) {
           const r = getReading('column', id);
           if (!r && p < 0.02) return;   // 열자마자 나가면 기록 안 함
@@ -203,7 +219,7 @@ export function renderColumn(view, app, id) {
           }
         },
         onChrome: (v) => chrome.setVisible(v),
-        onAutoChange: (on) => chrome.setAuto(on),
+        onAutoChange: (state) => { chrome.setAuto(state); wantAwake('auto', state !== 'off'); },
         onKey: {
           next: () => neighbors.next && navigate(`/c/${encodeURIComponent(neighbors.next.id)}`),
           prev: () => neighbors.prev && navigate(`/c/${encodeURIComponent(neighbors.prev.id)}`),
@@ -212,7 +228,13 @@ export function renderColumn(view, app, id) {
         },
       });
       cleanups.push(() => ctrl.destroy());
-      chrome.setVisible(true);
+      // 바: 목록에서 들어오면 1.5초만 보였다 숨김, 글끼리 넘어갈 때는 숨긴 채
+      if (quiet) ctrl.setChrome(false);
+      else {
+        ctrl.setChrome(true);
+        const t = setTimeout(() => { if (!chrome.busy) ctrl.setChrome(false); }, 1500);
+        cleanups.push(() => clearTimeout(t));
+      }
 
       const r = getReading('column', id);
       const wasRead = statusOf(r) === 'read';

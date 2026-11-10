@@ -2,7 +2,7 @@
 import { html, mount, onAction, toast } from '../lib/dom.js';
 import { errorMessage } from '../lib/supabase.js';
 import { loadNovels, cachedNovels, novelById, loadChapters, cachedChapters, countNewSince, chapterSortDesc, setChapterSortDesc } from '../lib/novels.js';
-import { chapterLabel, continueTarget, lastOpened, filterNovels } from '../lib/novelText.js';
+import { chapterNoLabel, chapterRest, chapterTitleLine, chapterTotal, continueTarget, lastOpened, filterNovels } from '../lib/novelText.js';
 import { loadReading, novelReading, statusOf } from '../lib/progress.js';
 import { fmtDate } from '../lib/columns.js';
 import { icon } from '../components/icons.js';
@@ -87,7 +87,7 @@ export function renderNovels(view) {
             </div>
             ${st.cont ? html`
               <a href="${chapterHref(n.id, st.cont.chapter.key)}" class="no-underline h-10 px-3 rounded-[10px] border border-line text-ink text-sm flex items-center gap-2 hover-mouse:bg-chip">
-                ${icon('play', 16)}<span class="flex-1 truncate">${st.started ? '이어 읽기' : '처음부터'} · ${chapterLabel(st.cont.chapter)}</span></a>` : ''}
+                ${icon('play', 16)}<span class="flex-1 truncate">${st.started ? '이어 읽기' : '처음부터'} · ${chapterTitleLine(st.cont.chapter)}</span></a>` : ''}
           </article>`;
         })}
       </div>
@@ -139,7 +139,8 @@ export function chapterRows(nid, chapters, { current = null, since = null, desc 
     return html`
       <a href="${chapterHref(nid, c.key)}" data-key="${c.key}" ${on ? html`aria-current="true"` : ''}
          class="nv-row ${on ? 'is-current' : ''} ${s === 'read' ? 'is-read' : ''}">
-        <span class="nv-row-t">${chapterLabel(c)}</span>
+        <span class="nv-row-n">${chapterNoLabel(c)}</span>
+        <span class="nv-row-t">${chapterRest(c)}</span>
         ${isNew ? html`<span class="nv-new">새</span>` : ''}
         ${s === 'reading' ? html`<span class="nv-row-p" aria-label="${Math.round((r.progress || 0) * 100)}% 읽음"><i style="width:${Math.max(6, Math.round((r.progress || 0) * 100))}%"></i></span>` : ''}
         ${s === 'read' ? html`<span class="nv-row-c" aria-label="읽음">${icon('check', 15, 2.4)}</span>` : ''}
@@ -169,13 +170,13 @@ export function renderNovel(view, id) {
       </header>
       <div class="px-5 lg:px-12 pb-10 max-w-[760px] flex flex-col gap-4">
         ${!chapters ? html`<p class="text-sm text-muted py-6">${error || '불러오는 중…'}</p>` : html`
-          <div class="text-[13px] text-muted">${chapters.length.toLocaleString()}화 · 읽은 회차 ${read.toLocaleString()}${novel?.last_added_at ? ` · 마지막 추가 ${fmtDate(novel.last_added_at)}` : ''}</div>
+          <div class="text-[13px] text-muted">${chapterTotal(chapters).toLocaleString()}화 · 읽은 회차 ${read.toLocaleString()}${novel?.last_added_at ? ` · 마지막 추가 ${fmtDate(novel.last_added_at)}` : ''}</div>
           ${cont ? html`
             <a href="${chapterHref(id, cont.chapter.key)}" class="no-underline bg-hero text-hero-ink rounded-[16px] p-4 flex items-center gap-3 hover-mouse:opacity-95">
               <span class="w-10 h-10 rounded-full bg-accent text-white flex items-center justify-center shrink-0">${icon('play', 18)}</span>
               <span class="flex-1 min-w-0 flex flex-col gap-0.5">
                 <span class="text-xs text-hero-muted">${cont.fresh && !since ? '처음부터 읽기' : cont.fresh ? '다음 회차' : '이어 읽기'}</span>
-                <span class="font-bold truncate">${chapterLabel(cont.chapter)}</span>
+                <span class="font-bold truncate">${chapterTitleLine(cont.chapter)}</span>
               </span>
             </a>` : ''}
           <div class="flex items-center gap-2 border-b border-line pb-2 text-[13px]">

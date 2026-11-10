@@ -6,9 +6,10 @@ import { html, mount, onAction, toast } from '../lib/dom.js';
 import { errorMessage } from '../lib/supabase.js';
 import { navigate } from '../router.js';
 import { loadNovels, novelById, loadChapters, cachedChapters, fetchChapterText, prefetchChapter, chapterSortDesc, setChapterSortDesc } from '../lib/novels.js';
-import { splitParagraphs, chapterLabel, lastOpened } from '../lib/novelText.js';
+import { splitParagraphs, chapterLabel, chapterNo, chapterNoLabel, chapterRest, chapterTitleLine, chapterTotal, findChapterByNo, lastOpened } from '../lib/novelText.js';
 import { loadReading, getReading, saveReading, statusOf, novelReading } from '../lib/progress.js';
-import { getView } from '../lib/view.js';
+import { getView, setView } from '../lib/view.js';
+import { wantAwake } from '../lib/wakeLock.js';
 import { applyReaderTheme, resetReaderTheme, appDark } from '../lib/readerTheme.js';
 import { createSearch } from '../lib/search.js';
 import { armFullscreen } from '../lib/fullscreen.js';
@@ -23,6 +24,11 @@ import { readMinutes, kChars } from './column.js';
 const wide = () => matchMedia('(min-width: 1024px)').matches;
 const PANEL_KEY = 'ui:nvPanel';
 const panelPref = () => { try { return localStorage.getItem(PANEL_KEY) !== '0'; } catch { return true; } };
+
+// 회차 → 회차로 넘어갈 때: 바를 다시 띄우지 않고, 자동 재생은 이어서
+let lastLeave = null;   // { nid, t }
+let carryAuto = null;   // { nid, t }
+const recent = (x, nid) => x && x.nid === nid && Date.now() - x.t < 3000;
 
 export function renderChapter(view, nid, key) {
   const cleanups = [];
@@ -50,6 +56,11 @@ export function renderChapter(view, nid, key) {
   const root = view.querySelector('[data-reader-root]');
   const inner = view.querySelector('[data-inner]');
   window.scrollTo(0, 0);
+  const quiet = recent(lastLeave, nid);
+  const resumeAuto = recent(carryAuto, nid);
+  carryAuto = null;
+  wantAwake('read', true);
+  cleanups.push(() => { wantAwake('read', false); wantAwake('auto', false); });
 
   // ---------- 보기 설정 ----------
   const applyView = () => applyReaderTheme([root, panel], scope);
@@ -73,7 +84,7 @@ export function renderChapter(view, nid, key) {
         <button type="button" data-action="sort" data-v="asc" aria-pressed="${String(!desc)}">1화부터</button>
         <button type="button" data-action="sort" data-v="desc" aria-pressed="${String(desc)}">최신 회차부터</button>
       </div>
-      <nav class="nv-list">${chapterRows(nid, chapters, { current: key, since, desc })}</nav>`);
+      <nav class="nv-list nv-list-panel">${chapterRows(nid, chapters, { current: key, since, desc })}</nav>`);
   };
   const revealCurrent = () => {
     const el = panel.querySelector('.is-current');
@@ -99,19 +110,19 @@ export function renderChapter(view, nid, key) {
   let ctrl = null;
   let search = null;
   let neighbors = { prev: null, next: null };
-  const navOf = (c) => (c ? { href: chapterHref(nid, c.key), label: chapterLabel(c) } : null);
+  const navOf = (c) => (c ? { href: chapterHref(nid, c.key), label: chapterTitleLine(c) } : null);
   const info = () => {
     if (!ch) return '';
     const rows = novelReading(nid);
-    const readN = Object.values(rows).filter((r) => statusOf(r) === 'read').length;
-    const total = chapters.length;
+    const readN = Object.entries(rows).filter(([k, r]) => k !== 'intro' && statusOf(r) === 'read').length;
+    const total = chapterTotal(chapters);
     const p = Math.round((ctrl?.progress() || 0) * 100);
     const r = getReading('chapter', itemId);
     return html`
       <span class="ri-small">${[novel?.title, novel?.author, novel?.genre].filter(Boolean).join(' · ')}</span>
       <span class="ri-title">${ch.title || chapterLabel(ch)}</span>
       <div class="ri-grid">
-        <div class="ri-stat"><span>회차</span><b>${(idx + 1).toLocaleString()} / ${total.toLocaleString()}화</b></div>
+        <div class="ri-stat"><span>회차</span><b>${chapterNoLabel(ch) || '-'} / 총 ${total.toLocaleString()}화</b></div>
         <div class="ri-stat"><span>분량</span><b>${ch.char_count ? `${kChars(ch.char_count)} · 약 ${readMinutes(ch.char_count)}분` : '-'}</b></div>
       </div>
       <div class="ri-bar"><span>이 회차<em style="font-style:normal;color:var(--r-muted)">${p}%</em></span><i><b style="width:${p}%"></b></i></div>
@@ -126,7 +137,20 @@ export function renderChapter(view, nid, key) {
     prev: null, next: null, prevText: '이전화', nextText: '다음화',
     panelButton: true, onPanel: () => setPanel(!panelOpen),
     onSettings: () => openViewSettings({ scope, appDark, onChange: applyView }),
-    onAuto: () => ctrl?.toggleAuto(),
+    getSpeed: () => getView(scope).speed,
+    onAutoSpeed: (v) => setView(scope, { speed: v }),
+    onAutoStart: () => ctrl?.startAuto(),
+    onAutoStop: () => ctrl?.stopAuto(),
+    onAutoResume: () => ctrl?.resumeAuto(),
+    jump: {
+      go(n) {
+        const { exact, near } = findChapterByNo(chapters, n);
+        if (exact) { goChapter(exact); return { ok: true }; }
+        return near ? { near: { n: chapterNo(near), label: chapterNoLabel(near) } } : {};
+      },
+      first: () => goChapter(chapters.find((c) => c.key !== 'intro') || chapters[0]),
+      last: () => goChapter(chapters[chapters.length - 1]),
+    },
     onPin: () => ctrl?.setChrome(true),   // 고정을 바꾸면 지금은 보이는 상태로 맞춤
     onSeek: (p) => ctrl?.seek(p),
     onSearch: (q) => search?.run(q) || 0,
@@ -138,13 +162,22 @@ export function renderChapter(view, nid, key) {
 
   const endEl = document.createElement('footer');
   endEl.className = 'reader-end';
+  let countdown = 0;
+  let cdTimer = null;
+  const stopCountdown = () => { if (cdTimer) { clearInterval(cdTimer); cdTimer = null; countdown = 0; drawEnd(); } };
+  cleanups.push(() => clearInterval(cdTimer));
   const drawEnd = () => {
+    if (!ch) return;
     const read = statusOf(getReading('chapter', itemId)) === 'read';
+    const nx = neighbors.next;
+    const nxRest = nx ? (nx.key === 'intro' ? '' : chapterRest(nx)) : '';
     mount(endEl, html`
-      ${neighbors.next ? html`
-        <a class="nv-next" href="${chapterHref(nid, neighbors.next.key)}">
-          <small>다음 회차</small><strong>${chapterLabel(neighbors.next)}</strong></a>` : html`
-        <p class="nv-last">마지막 회차예요. 새 회차가 올라오면 목록에 "새"로 표시돼요.</p>`}
+      <div class="re-mark">${chapterNoLabel(ch) || chapterLabel(ch)} 끝</div>
+      ${nx ? html`
+        <a class="nv-next" href="${chapterHref(nid, nx.key)}">
+          <small>${countdown ? html`<span class="nv-count">${countdown}초 뒤 다음 화 · 화면을 누르면 멈춰요</span>` : '다음 화 ›'}</small>
+          <strong>${chapterNoLabel(nx) && nxRest ? html`<span class="nv-next-no">${chapterNoLabel(nx)}</span>${nxRest}` : chapterTitleLine(nx)}</strong></a>` : html`
+        <p class="nv-last">마지막 화예요. 새 회차가 올라오면 목록에 "새"로 표시돼요.</p>`}
       <div class="re-actions">
         <button type="button" class="re-btn ${read ? 'is-on' : ''}" data-action="toggleRead" aria-pressed="${String(read)}">
           ${icon('check', 18, 2.4)}${read ? '읽음' : '다 읽음으로 표시'}</button>
@@ -177,9 +210,14 @@ export function renderChapter(view, nid, key) {
         return;
       }
       neighbors = { prev: chapters[idx - 1] || null, next: chapters[idx + 1] || null };
-      chrome.setTitle(`${novel.title} · ${(idx + 1).toLocaleString()} / ${chapters.length.toLocaleString()}화`, chapterLabel(ch));
+      const no = chapterNoLabel(ch);
+      const total = chapterTotal(chapters);
+      chrome.setTitle(
+        no && ch.key !== 'intro' ? `${novel.title} · ${no} / 총 ${total.toLocaleString()}화` : no ? `${novel.title} · ${no}` : novel.title,
+        chapterRest(ch) || no || chapterLabel(ch),
+      );
       chrome.setNav(navOf(neighbors.prev), navOf(neighbors.next));
-      document.title = `${chapterLabel(ch)} · ${novel.title}`;
+      document.title = `${chapterTitleLine(ch)} · ${novel.title}`;
       if (panelOpen) setPanel(true);
 
       const [text] = await Promise.all([fetchChapterText(ch), loadReading().catch(() => null)]);
@@ -207,7 +245,9 @@ export function renderChapter(view, nid, key) {
         getView: () => getView(scope),
         edges: () => chrome.edges(),
         isPinned: () => chrome.pinned,
-        onScrollNow: (p) => chrome.setProgress(p),
+        isBusy: () => chrome.busy,
+        justClosed: () => chrome.justClosed,
+        onScrollNow: (p, auto) => { chrome.setProgress(p); if (!auto) chrome.flashLine(); },
         onPosition(anchor, p) {
           const r = getReading('chapter', itemId);
           if (!r && p < 0.02) return;
@@ -221,7 +261,23 @@ export function renderChapter(view, nid, key) {
           prefetchChapter(neighbors.next);
         },
         onChrome: (v) => chrome.setVisible(v),
-        onAutoChange: (on) => chrome.setAuto(on),
+        onAutoChange: (state) => {
+          chrome.setAuto(state);
+          wantAwake('auto', state !== 'off');
+          if (state !== 'wait') stopCountdown();
+        },
+        // 자동 재생이 회차 끝에 닿음 → 3초 뒤 다음 화 (자동 재생 유지)
+        onAutoEnd: () => {
+          if (!neighbors.next) { ctrl.stopAuto(); toast('마지막 화까지 읽었어요.'); return; }
+          countdown = 3; drawEnd();
+          cdTimer = setInterval(() => {
+            countdown -= 1;
+            if (countdown > 0) { drawEnd(); return; }
+            clearInterval(cdTimer); cdTimer = null;
+            carryAuto = { nid, t: Date.now() };
+            goChapter(neighbors.next);
+          }, 1000);
+        },
         onKey: {
           next: () => goChapter(neighbors.next),
           prev: () => goChapter(neighbors.prev),
@@ -234,8 +290,18 @@ export function renderChapter(view, nid, key) {
           },
         },
       });
-      cleanups.push(() => ctrl.destroy());
-      chrome.setVisible(true);
+      cleanups.push(() => {
+        if (ctrl.autoState !== 'off' && !carryAuto) carryAuto = { nid, t: Date.now() };
+        lastLeave = { nid, t: Date.now() };
+        ctrl.destroy();
+      });
+      // 바: 목록에서 들어오면 1.5초만 보였다 숨김, 회차끼리 넘어갈 때는 숨긴 채
+      if (quiet || resumeAuto) ctrl.setChrome(false);
+      else {
+        ctrl.setChrome(true);
+        const t = setTimeout(() => { if (!chrome.busy) ctrl.setChrome(false); }, 1500);
+        cleanups.push(() => clearTimeout(t));
+      }
 
       const pf = setTimeout(() => prefetchChapter(neighbors.next), 3000);
       cleanups.push(() => clearTimeout(pf));
@@ -248,6 +314,7 @@ export function renderChapter(view, nid, key) {
       } else ctrl.refresh();
       if (wasRead) ctrl.setEnded(true);
       chrome.setProgress(ctrl.progress());
+      if (resumeAuto) setTimeout(() => { if (alive) ctrl.startAuto(); }, 600);
     } catch (err) {
       if (!alive) return;
       mount(inner, html`<div style="padding:48px 0;display:flex;flex-direction:column;gap:12px">

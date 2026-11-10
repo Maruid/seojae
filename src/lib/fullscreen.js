@@ -27,3 +27,10 @@ export function armFullscreen() {
   window.addEventListener('pointerup', onDown, true);
   return () => window.removeEventListener('pointerup', onDown, true);
 }
+
+// 전체 화면일 때 html.is-fs → 카메라 구멍 자리(화면 위 안전 영역)를 검은 띠로 가림 (app.css)
+if (typeof document !== 'undefined') {
+  document.addEventListener('fullscreenchange', () => {
+    document.documentElement.classList.toggle('is-fs', !!document.fullscreenElement);
+  });
+}
