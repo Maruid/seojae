@@ -265,3 +265,49 @@ body:has(.shell[data-immersive]) #toast { bottom: calc(24px + env(safe-area-inse
 .reader-body .r-embed-play::after { content: ""; position: absolute; left: 16px; top: 12px; border-left: 12px solid var(--r-bg); border-top: 8px solid transparent; border-bottom: 8px solid transparent; }
 .reader-body .r-embed-title { font-size: 15px; font-weight: 700; line-height: 1.4; }
 .reader-body .r-embed-src { font-size: 12px; color: var(--r-muted); }
+
+/* =====================================================================
+   소설: 회차 목록 · 회차 패널 · 읽기
+===================================================================== */
+.nv-list { display: flex; flex-direction: column; }
+.nv-row {
+  display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 10px 6px;
+  border-bottom: 1px solid var(--r-line, var(--line)); color: var(--r-fg, var(--ink)); text-decoration: none; font-size: 15px;
+}
+.nv-row-t { flex: 1; min-width: 0; line-height: 1.4; }
+.nv-row.is-read { color: var(--r-muted, var(--muted)); }
+.nv-row.is-current { background: var(--r-chip, var(--chip)); font-weight: 700; border-radius: 10px; padding-left: 10px; padding-right: 10px; }
+.nv-new { flex-shrink: 0; font-size: 11px; font-weight: 700; color: #fff; background: var(--accent); border-radius: 99px; padding: 2px 7px; }
+.nv-row-p { flex-shrink: 0; width: 44px; height: 4px; border-radius: 99px; background: var(--r-line, var(--line)); overflow: hidden; }
+.nv-row-p i { display: block; height: 100%; background: var(--accent); }
+.nv-row-c { flex-shrink: 0; color: var(--ok-ink); display: inline-flex; }
+@media (hover: hover) and (pointer: fine) { .nv-row:hover { background: var(--r-chip, var(--chip)); } }
+
+.rb-title small { display: block; font-size: 11px; font-weight: 400; color: var(--r-muted); line-height: 1.2; overflow: hidden; text-overflow: ellipsis; }
+
+.nv-split { display: block; }
+.nv-panel { display: none; }
+.nv-split[data-panel="open"] .nv-panel {
+  display: flex; flex-direction: column; position: fixed; top: 0; right: 0; bottom: 0; width: min(88vw, 380px); z-index: 45;
+  background: var(--r-sheet); color: var(--r-fg); overflow-y: auto; padding: 0 12px calc(16px + env(safe-area-inset-bottom));
+  box-shadow: -10px 0 40px rgba(0,0,0,.25);
+}
+.nv-split[data-panel="open"]::before { content: ""; position: fixed; inset: 0; z-index: 44; background: rgba(0,0,0,.35); }
+.nv-panel-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 4px; height: 56px; background: var(--r-sheet); border-bottom: 1px solid var(--r-line); }
+.nv-panel-title { flex: 1; min-width: 0; font-weight: 700; color: var(--r-fg); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: 4px; }
+.nv-panel-msg { color: var(--r-muted); padding: 24px 8px; }
+@media (min-width: 1024px) {
+  .nv-split[data-panel="open"] { display: grid; grid-template-columns: 320px minmax(0, 1fr); }
+  .nv-split[data-panel="open"]::before { display: none; }
+  .nv-split[data-panel="open"] .nv-panel { position: sticky; top: 0; height: 100dvh; width: auto; box-shadow: none; border-right: 1px solid var(--r-line); z-index: 1; }
+}
+
+.nv-body p { margin: 0 0 var(--r-para); }
+.nv-gap { height: calc(var(--r-lh) * 1em); }
+.nv-next {
+  display: flex; flex-direction: column; gap: 4px; padding: 16px 18px; border-radius: 14px; text-decoration: none;
+  background: var(--r-fg); color: var(--r-bg);
+}
+.nv-next small { font-size: 12px; opacity: .75; }
+.nv-next strong { font-size: 16px; }
+.nv-last { margin: 0; color: var(--r-muted); font-size: 14px; }

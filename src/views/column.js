@@ -161,6 +161,7 @@ export function renderColumn(view, app, id) {
       // ---------- 조작 · 위치 ----------
       ctrl = attachReader({
         body: el,
+        tapArea: host.querySelector('.reader-main'),
         getView: () => getView(scope),
         topOffset: () => bar.offsetHeight,
         onPosition(anchor, p) {

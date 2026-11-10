@@ -5,15 +5,32 @@ import { icon } from '../components/icons.js';
 import { initial } from '../components/layout.js';
 import { loadColumns, cachedColumns } from '../lib/columns.js';
 import { loadReading, allReading, statusOf } from '../lib/progress.js';
+import { loadNovels, cachedNovels, cachedChapters } from '../lib/novels.js';
+import { chapterLabel } from '../lib/novelText.js';
 
-// 이어 읽기: 읽는 중인 글 중 가장 최근에 본 것
-function continueItem(cols) {
+// 이어 읽기: 권한 있는 섹터에서 읽는 중인 글·회차 중 가장 최근에 본 것
+async function continueItem(me) {
+  const hasCol = canAccess(me, 'column');
+  const hasNov = canAccess(me, 'novel');
   const rows = Object.values(allReading())
-    .filter((r) => r.item_kind === 'column' && statusOf(r) === 'reading')
+    .filter((r) => statusOf(r) === 'reading' && ((r.item_kind === 'column' && hasCol) || (r.item_kind === 'chapter' && hasNov)))
     .sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)));
-  for (const r of rows) {
-    const c = cols.find((x) => x.id === r.item_id);
-    if (c) return { col: c, progress: r.progress || 0 };
+  for (const r of rows.slice(0, 5)) {
+    if (r.item_kind === 'column') {
+      const c = (cachedColumns() || []).find((x) => x.id === r.item_id);
+      if (c) return { href: `#/c/${encodeURIComponent(c.id)}`, label: `칼럼 · ${c.category || ''}`, title: c.title, progress: r.progress || 0 };
+    } else {
+      const n = (cachedNovels() || []).find((x) => x.id === r.novel_id);
+      if (!n) continue;
+      const key = r.item_id.slice(r.novel_id.length + 1);
+      let ch = (cachedChapters(n.id) || []).find((c) => c.key === key);
+      if (!ch) {
+        const { data } = await supabase.from('novel_chapters').select('key,title,display_title')
+          .eq('novel_id', n.id).eq('key', key).maybeSingle();
+        ch = data;
+      }
+      if (ch) return { href: `#/n/${encodeURIComponent(n.id)}/${encodeURIComponent(key)}`, label: `소설 · ${n.title}`, title: chapterLabel(ch), progress: r.progress || 0 };
+    }
   }
   return null;
 }
@@ -25,17 +42,12 @@ const fmtDate = (iso) => {
 
 async function loadStats(me) {
   const out = { columns: null, unread: null, novels: null, chapters: null, recent: [], cont: null };
-  const jobs = [];
-  if (canAccess(me, 'column')) {
-    jobs.push(Promise.all([loadColumns(), loadReading().catch(() => null)]).then(([cols]) => fillColumns(out, cols)));
-  }
-  if (canAccess(me, 'novel')) {
-    jobs.push(supabase.from('novels').select('chapter_count').then(({ data }) => {
-      out.novels = data?.length ?? null;
-      out.chapters = data?.reduce((a, n) => a + (n.chapter_count || 0), 0) ?? null;
-    }));
-  }
+  const jobs = [loadReading().catch(() => null)];
+  if (canAccess(me, 'column')) jobs.push(loadColumns().then((cols) => fillColumns(out, cols)));
+  if (canAccess(me, 'novel')) jobs.push(loadNovels().then((ns) => fillNovels(out, ns)));
   await Promise.allSettled(jobs);
+  if (out.columns != null) fillColumns(out, cachedColumns());   // 읽기 기록이 늦게 와도 안 읽음 수 다시
+  out.cont = await continueItem(me).catch(() => null);
   return out;
 }
 
@@ -43,7 +55,10 @@ function fillColumns(out, cols) {
   out.columns = cols.length;
   out.recent = cols.slice(0, 5);
   out.unread = cols.filter((c) => statusOf(allReading()[`column:${c.id}`]) === 'unread').length;
-  out.cont = continueItem(cols);
+}
+function fillNovels(out, ns) {
+  out.novels = ns.length;
+  out.chapters = ns.reduce((a, n) => a + (n.chapter_count || 0), 0);
 }
 
 export async function renderHome(view, app) {
@@ -66,9 +81,9 @@ export async function renderHome(view, app) {
       <section class="flex flex-col gap-3">
         <h2 class="m-0 text-[15px] lg:text-[28px] font-bold text-muted lg:text-ink">이어 읽기</h2>
         ${st.cont ? html`
-          <a href="#/c/${encodeURIComponent(st.cont.col.id)}" class="no-underline bg-hero text-hero-ink rounded-[18px] p-5 flex flex-col gap-2.5 hover-mouse:opacity-95">
-            <span class="text-xs text-hero-muted">칼럼 · ${st.cont.col.category || ''}</span>
-            <span class="text-[18px] lg:text-[20px] font-bold leading-snug">${st.cont.col.title}</span>
+          <a href="${st.cont.href}" class="no-underline bg-hero text-hero-ink rounded-[18px] p-5 flex flex-col gap-2.5 hover-mouse:opacity-95">
+            <span class="text-xs text-hero-muted">${st.cont.label}</span>
+            <span class="text-[18px] lg:text-[20px] font-bold leading-snug">${st.cont.title}</span>
             <span class="flex items-center gap-3 text-xs text-hero-muted">
               <span class="flex-1 h-1 rounded-full bg-white/15 overflow-hidden"><span class="block h-full bg-accent" style="width:${Math.max(4, Math.round(st.cont.progress * 100))}%"></span></span>
               ${Math.round(st.cont.progress * 100)}% · 이어 읽기 ›</span>
@@ -109,6 +124,7 @@ export async function renderHome(view, app) {
 
   const first = { columns: null, unread: null, novels: null, chapters: null, recent: [], cont: null };
   if (hasCol && cachedColumns()) fillColumns(first, cachedColumns());
+  if (hasNov && cachedNovels()) fillNovels(first, cachedNovels());
   draw(first);
   if (sectorCount) draw(await loadStats(me));
 }

@@ -22,6 +22,14 @@ export function getReading(kind, id) {
 }
 export function allReading() { return state; }
 
+// 소설 하나의 회차 기록들 (key → row)
+export function novelReading(novelId) {
+  const out = {};
+  const prefix = `chapter:${novelId}/`;
+  for (const [k, r] of Object.entries(state)) if (k.startsWith(prefix)) out[k.slice(prefix.length)] = r;
+  return out;
+}
+
 // 읽음 상태: 'read' | 'reading' | 'unread'
 export function statusOf(row) {
   if (!row) return 'unread';
@@ -33,13 +41,21 @@ export function statusOf(row) {
 // 서버에서 내 기록 전체 받기 (보내지 못한 기록은 그대로 우선)
 export async function loadReading({ force = false } = {}) {
   if (!force && Date.now() - loadedAt < 60_000) return state;
-  const { data, error } = await supabase
-    .from('reading_state')
-    .select('item_kind,item_id,novel_id,anchor,progress,finished_at,updated_at');
-  if (error) { if (!navigator.onLine) return state; throw error; }
+  // 소설 회차까지 합치면 1,000행(서버 1회 최대)을 넘을 수 있어 나눠서 받음
+  const data = [];
+  for (let from = 0; ; from += 1000) {
+    const { data: part, error } = await supabase
+      .from('reading_state')
+      .select('item_kind,item_id,novel_id,anchor,progress,finished_at,updated_at')
+      .order('item_kind').order('item_id')
+      .range(from, from + 999);
+    if (error) { if (!navigator.onLine) return state; throw error; }
+    data.push(...part);
+    if (part.length < 1000) break;
+  }
   const pending = read(OUTBOX);
   const next = {};
-  for (const r of data || []) next[keyOf(r.item_kind, r.item_id)] = r;
+  for (const r of data) next[keyOf(r.item_kind, r.item_id)] = r;
   for (const [k, r] of Object.entries(pending)) next[k] = { ...next[k], ...r };
   state = next;
   loadedAt = Date.now();

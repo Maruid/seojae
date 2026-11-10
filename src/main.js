@@ -12,6 +12,8 @@ import { renderMe } from './views/me.js';
 import { renderPlaceholder, renderForbidden } from './views/placeholder.js';
 import { renderColumns } from './views/columns.js';
 import { renderColumn } from './views/column.js';
+import { renderNovels, renderNovel } from './views/novels.js';
+import { renderChapter } from './views/chapter.js';
 import { startReadingSync } from './lib/progress.js';
 
 // 앱 전역 상태
@@ -68,9 +70,9 @@ async function route(r) {
   }
 
   // 3) 앱 화면
-  const reading = r.name === 'column';
+  const reading = r.name === 'column' || r.name === 'chapter';
   const wide = matchMedia('(min-width: 1024px)').matches;
-  const shellOpts = { immersive: reading, compact: (r.name === 'columns' || r.name === 'column') && wide };
+  const shellOpts = { immersive: reading, compact: ['columns', 'column', 'chapter'].includes(r.name) && wide };
   app.redrawShell = () => renderShell(app, r.name, shellOpts);
   const view = freshView(renderShell(app, r.name, shellOpts));
   switch (r.name) {
@@ -87,7 +89,11 @@ async function route(r) {
     case 'novels':
     case 'novel':
     case 'chapter':
-      return canAccess(app.me, 'novel') ? renderPlaceholder(view, r.name) : renderForbidden(view);
+      if (!canAccess(app.me, 'novel')) return renderForbidden(view);
+      if (r.name === 'novels') return renderNovels(view);
+      if (r.name === 'novel') return renderNovel(view, r.params.id);
+      app.cleanup = renderChapter(view, r.params.id, r.params.key);
+      return;
     case 'admin':
       return app.me.is_admin ? renderPlaceholder(view, r.name) : renderForbidden(view);
     default:
@@ -124,7 +130,7 @@ async function boot() {
 
   // 창 폭이 PC/모바일 경계를 넘으면 화면 구성을 다시 (칼럼 2단 ↔ 1단)
   matchMedia('(min-width: 1024px)').addEventListener('change', () => {
-    if (app.route && ['columns', 'column'].includes(app.route.name)) route(app.route);
+    if (app.route && ['columns', 'column', 'chapter'].includes(app.route.name)) route(app.route);
   });
 
   startRouter(route);

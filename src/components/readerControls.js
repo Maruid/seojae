@@ -1,7 +1,7 @@
 // 읽기 화면 조작 (칼럼·소설 공용)
 //   - 읽는 위치 추적: 화면 맨 위에 걸린 문단 id + 진행률
 //   - 끝까지 오면 onEnd (자동 읽음 처리)
-//   - 키보드: Space/PageDown/→ 다음, Shift+Space/PageUp/← 이전, Home/End, J/K 다음·이전 글
+//   - 키보드: Space/PageDown/→ 다음(끝에서 한 번 더 → onKey.endNext), Shift+Space/PageUp/← 이전, Home/End, J/K 다음·이전 글
 //   - 터치 기기만: 화면 위 30% 이전 / 아래 30% 다음 / 가운데 메뉴 숨김·보임
 //   - 자동 스크롤: 화면을 건드리면 멈춤
 const coarse = () => matchMedia('(pointer: coarse)').matches;
@@ -9,6 +9,7 @@ const typing = (el) => el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$
 
 export function attachReader({
   body,                 // 문단이 들어 있는 요소
+  tapArea = body,       // 탭 넘기기를 받는 영역 (본문 + 끝의 버튼 영역까지)
   anchorSelector = 'p[id], [data-anchor]',
   getView,              // () => 현재 보기 설정 (tapPaging, speed)
   topOffset = () => 0,  // 상단바 높이
@@ -77,8 +78,11 @@ export function attachReader({
   };
 
   // ---------- 넘기기 ----------
+  const atBottom = () => window.scrollY >= maxScroll() - 4;
   const go = (dir, smooth = true) => {
     stopAuto();
+    // 끝에서 한 번 더 넘기면 다음 회차 (소설)
+    if (dir > 0 && atBottom() && onKey.endNext) { onKey.endNext(); return; }
     window.scrollBy({ top: dir * page(), behavior: smooth ? 'smooth' : 'auto' });
   };
 
@@ -107,7 +111,7 @@ export function attachReader({
     else if (tp && y > 0.7) go(1, false);
     else setChrome(!chrome);
   };
-  body.addEventListener('click', tap);
+  tapArea.addEventListener('click', tap);
 
   // ---------- 자동 스크롤 ----------
   const auto = { running: false, raf: 0, last: 0, acc: 0 };
@@ -166,7 +170,7 @@ export function attachReader({
       posTimer = null;
       window.removeEventListener('scroll', onScroll);
       document.removeEventListener('keydown', key);
-      body.removeEventListener('click', tap);
+      tapArea.removeEventListener('click', tap);
     },
   };
 }

@@ -84,12 +84,12 @@ insert into public.grants(user_id, sector)
 npm install
 cp .env.example .env.local   # publishable key 입력
 npm run dev                  # http://localhost:5173
-npm test                     # escape · 라우터 · 권한별 탭 · 본문 변환 · 보기 설정 테스트
+npm test                     # escape · 라우터 · 권한별 탭 · 본문 변환 · 보기 설정 · 소설 문단 테스트
 ```
 
 ## 진행 상황
 
 - [x] 1단계 골격: 로그인 → 승인 대기/차단 → 홈, 내 정보(화면 설정), 권한별 탭, 반응형 레이아웃, 배포
 - [x] 2단계 칼럼: 목록 · 읽기 · 보기 설정 · 읽음 처리 · 자기 글 링크 (migration_002 필요)
-- [ ] 3단계 소설: 목록 · 회차 목록 · 읽기 · 다음 회차 미리 받기
+- [x] 3단계 소설: 목록 · 회차 목록 · 읽기 · 다음 회차 미리 받기 (DB 변경 없음)
 - [ ] 4단계 관리자 + PWA: 승인/권한 화면, 앱 설치, 오프라인 캐시
