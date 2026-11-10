@@ -1,36 +1,60 @@
 // 읽기 화면 조작 (칼럼·소설 공용)
-//   - 읽는 위치 추적: 화면 맨 위에 걸린 문단 id + 진행률
+//   - 읽는 위치 추적: 화면 맨 위에 걸린 문단 id(칼럼) / 줄 번호(소설) + 진행률
 //   - 끝까지 오면 onEnd (자동 읽음 처리)
-//   - 키보드: Space/PageDown/→ 다음(끝에서 한 번 더 → onKey.endNext), Shift+Space/PageUp/← 이전, Home/End, J/K 다음·이전 글
-//   - 터치 기기만: 화면 위 30% 이전 / 아래 30% 다음 / 가운데 메뉴 숨김·보임
+//   - 넘기기: 미끄러지지 않고 바로 이동. 줄 단위로 맞춰서 이전 화면의 마지막 줄이 새 화면 맨 위에 한 줄만 겹침
+//       키보드: Space/PageDown/→ 다음(끝에서 한 번 더 → onKey.endNext), Shift+Space/PageUp/← 이전,
+//               Home/End, J/K 다음·이전 글, / 검색
+//   - 터치: 화면 위 30% 이전 / 아래 30% 다음 / 가운데 위·아래 바 보임·숨김
+//     마우스: 본문 가운데를 클릭하면 바 보임·숨김 (바 고정이 꺼져 있을 때)
+//   - 바 고정(isPinned)이 켜져 있으면 스크롤해도 바가 숨지 않음
 //   - 자동 스크롤: 화면을 건드리면 멈춤
 const coarse = () => matchMedia('(pointer: coarse)').matches;
 const typing = (el) => el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+
+// (x, y) 지점에 있는 글자 한 줄의 화면 위치
+function lineRectAt(root, x, y) {
+  let node = null; let off = 0;
+  if (document.caretRangeFromPoint) {
+    const r = document.caretRangeFromPoint(x, y);
+    if (r) { node = r.startContainer; off = r.startOffset; }
+  } else if (document.caretPositionFromPoint) {
+    const p = document.caretPositionFromPoint(x, y);
+    if (p) { node = p.offsetNode; off = p.offset; }
+  }
+  if (!node || node.nodeType !== 3 || !root.contains(node) || !node.length) return null;
+  const i = Math.min(off, node.length - 1);
+  const range = document.createRange();
+  range.setStart(node, i);
+  range.setEnd(node, i + 1);
+  const rect = range.getClientRects()[0] || range.getBoundingClientRect();
+  return rect && rect.height ? rect : null;
+}
 
 export function attachReader({
   body,                 // 문단이 들어 있는 요소
   tapArea = body,       // 탭 넘기기를 받는 영역 (본문 + 끝의 버튼 영역까지)
   anchorSelector = 'p[id], [data-anchor]',
   getView,              // () => 현재 보기 설정 (tapPaging, speed)
-  topOffset = () => 0,  // 상단바 높이
+  edges = () => ({ top: 0, bottom: window.innerHeight }),   // 바를 뺀 실제 읽는 영역
+  isPinned = () => false,
   onPosition,           // (anchor, progress) — 읽는 위치가 바뀔 때 (자주 불리지 않게 묶어서)
+  onScrollNow,          // (progress) — 스크롤할 때마다 (진행 막대용)
   onEnd,                // 끝까지 읽음
-  onChrome,             // (visible) 메뉴 보임/숨김
-  onKey = {},           // { next, prev, back }
+  onChrome,             // (visible) 위·아래 바 보임/숨김
+  onKey = {},           // { next, prev, back, endNext, search }
   onAutoChange,         // (running)
 }) {
   const doc = document.scrollingElement || document.documentElement;
-  const page = () => Math.max(120, window.innerHeight - topOffset() - 48);
   const maxScroll = () => Math.max(1, doc.scrollHeight - window.innerHeight);
-  const progress = () => Math.min(1, window.scrollY / maxScroll());
+  const progress = () => Math.min(1, Math.max(0, window.scrollY / maxScroll()));
+  const lineHeight = () => parseFloat(getComputedStyle(body).lineHeight) || 28;
 
   // ---------- 위치 추적 ----------
   let anchors = [];
   const collect = () => { anchors = [...body.querySelectorAll(anchorSelector)]; };
   collect();
   const currentAnchor = () => {
-    const top = topOffset() + 8;
-    // 이분 탐색: 아래끝이 top 보다 아래인 첫 문단
+    const top = edges().top + 8;
     let lo = 0; let hi = anchors.length - 1; let ans = null;
     while (lo <= hi) {
       const mid = (lo + hi) >> 1;
@@ -51,40 +75,75 @@ export function attachReader({
   let ended = false;
   let lastY = window.scrollY;
   let chrome = true;
-  const setChrome = (v) => { if (chrome !== v) { chrome = v; onChrome?.(v); } };
+  const setChrome = (v) => {
+    if (!v && isPinned()) v = true;
+    if (chrome !== v) { chrome = v; onChrome?.(v); }
+  };
 
   const onScroll = () => {
     const y = window.scrollY;
-    // 내려가면 메뉴 숨김, 올라가면 보임 (맨 위 근처는 항상 보임)
-    if (!auto.running) {
-      if (y < 80) setChrome(true);
+    // 내려가면 바 숨김, 올라가면 보임 (맨 위 근처는 항상 보임). 고정이면 그대로
+    if (!auto.running && !isPinned()) {
+      if (y < 40) setChrome(true);
       else if (y > lastY + 6) setChrome(false);
-      else if (y < lastY - 6) setChrome(true);
+      else if (y < lastY - 6 && !paging) setChrome(true);
     }
     lastY = y;
+    onScrollNow?.(progress());
     clearTimeout(posTimer);
     posTimer = setTimeout(() => {
       posTimer = null;
-      const p = progress();
-      onPosition?.(currentAnchor(), p);
+      onPosition?.(currentAnchor(), progress());
       if (!ended && lastVisible()) { ended = true; onEnd?.(); }
     }, 700);
   };
   window.addEventListener('scroll', onScroll, { passive: true });
 
-  // 글이 화면보다 짧으면 열자마자 끝
   const checkShort = () => {
     if (!ended && lastVisible()) { ended = true; onEnd?.(); }
   };
 
-  // ---------- 넘기기 ----------
+  // ---------- 넘기기 (즉시, 줄 단위) ----------
+  let paging = false;
   const atBottom = () => window.scrollY >= maxScroll() - 4;
-  const go = (dir, smooth = true) => {
-    stopAuto();
-    // 끝에서 한 번 더 넘기면 다음 회차 (소설)
-    if (dir > 0 && atBottom() && onKey.endNext) { onKey.endNext(); return; }
-    window.scrollBy({ top: dir * page(), behavior: smooth ? 'smooth' : 'auto' });
+  const atTop = () => window.scrollY <= 1;
+  const jump = (y) => {
+    paging = true;
+    window.scrollTo({ top: Math.max(0, Math.min(maxScroll(), y)), behavior: 'instant' });
+    setTimeout(() => { paging = false; }, 80);
   };
+
+  function go(dir) {
+    stopAuto();
+    // 본문 끝까지 다 보이는 상태에서 한 번 더 넘기면 다음 회차 (소설)
+    const textDone = body.getBoundingClientRect().bottom <= edges().bottom + 1;
+    if (dir > 0 && onKey.endNext && (atBottom() || textDone)) { onKey.endNext(); return; }
+    if (dir > 0 && atBottom()) return;
+    if (dir < 0 && atTop()) return;
+    const { top, bottom } = edges();
+    const lh = lineHeight();
+    const x = body.getBoundingClientRect().left + 6;
+    const fallback = Math.max(120, bottom - top - lh);
+    if (dir > 0) {
+      // 아래 끝에 걸린(또는 마지막으로 보이는) 줄 → 새 화면 맨 위로
+      let rect = null;
+      for (let dy = 2; dy < lh * 2 && !rect; dy += lh / 4) {
+        const r = lineRectAt(body, x, bottom - dy);
+        if (r && r.top < bottom - 2 && r.bottom > top) rect = r;   // 실제로 화면에 걸친 줄만
+      }
+      const delta = rect ? rect.top - top : fallback;
+      jump(window.scrollY + (delta >= lh && delta <= bottom - top ? delta : fallback));
+    } else {
+      // 위 끝에 걸린(또는 첫 번째로 보이는) 줄 → 새 화면 맨 아래로
+      let rect = null;
+      for (let dy = 2; dy < lh * 2 && !rect; dy += lh / 4) {
+        const r = lineRectAt(body, x, top + dy);
+        if (r && r.bottom > top + 2 && r.top < bottom) rect = r;
+      }
+      const delta = rect ? bottom - rect.bottom : fallback;
+      jump(window.scrollY - (delta >= lh && delta <= bottom - top ? delta : fallback));
+    }
+  }
 
   const key = (e) => {
     if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || typing(document.activeElement)) return;
@@ -92,24 +151,28 @@ export function attachReader({
     if (k === ' ' || k === 'Spacebar') { e.preventDefault(); go(e.shiftKey ? -1 : 1); }
     else if (k === 'PageDown' || k === 'ArrowRight') { e.preventDefault(); go(1); }
     else if (k === 'PageUp' || k === 'ArrowLeft') { e.preventDefault(); go(-1); }
-    else if (k === 'Home') { e.preventDefault(); stopAuto(); window.scrollTo({ top: 0 }); }
-    else if (k === 'End') { e.preventDefault(); stopAuto(); window.scrollTo({ top: maxScroll() }); }
+    else if (k === 'Home') { e.preventDefault(); stopAuto(); jump(0); }
+    else if (k === 'End') { e.preventDefault(); stopAuto(); jump(maxScroll()); }
     else if ((k === 'j' || k === 'J') && onKey.next) { e.preventDefault(); onKey.next(); }
     else if ((k === 'k' || k === 'K') && onKey.prev) { e.preventDefault(); onKey.prev(); }
+    else if (k === '/' && onKey.search) { e.preventDefault(); onKey.search(); }
     else if (k === 'Escape' && onKey.back) { onKey.back(); }
   };
   document.addEventListener('keydown', key);
 
   const tap = (e) => {
-    if (!coarse()) return;
-    if (e.target.closest('a, button, input, label, img, summary, [data-no-tap]')) return;
+    if (e.target.closest('a, button, input, label, img, summary, mark, form, .reader-bar, .reader-foot, .rd-pop-wrap, [data-no-tap]')) return;
     if (String(window.getSelection?.() || '').length) return;
     if (auto.running) { stopAuto(); return; }
     const y = e.clientY / window.innerHeight;
-    const tp = getView().tapPaging;
-    if (tp && y < 0.3) go(-1, false);
-    else if (tp && y > 0.7) go(1, false);
-    else setChrome(!chrome);
+    if (coarse()) {
+      const tp = getView().tapPaging;
+      if (tp && y < 0.3) go(-1);
+      else if (tp && y > 0.7) go(1);
+      else if (!isPinned()) setChrome(!chrome);
+    } else if (!isPinned() && y > 0.25 && y < 0.75) {
+      setChrome(!chrome);
+    }
   };
   tapArea.addEventListener('click', tap);
 
@@ -150,21 +213,24 @@ export function attachReader({
   return {
     refresh() { collect(); checkShort(); },
     progress,
+    go,
+    seek(p) { stopAuto(); jump(p * maxScroll()); },
+    setChrome,
+    get chromeVisible() { return chrome; },
     toggleAuto() { auto.running ? stopAuto() : startAuto(); },
     stopAuto,
     get autoRunning() { return auto.running; },
     restore(anchor, prog) {
       collect();
       const el = anchor && anchors.find((a) => (a.id || a.dataset.anchor) === anchor);
-      if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - topOffset() - 8 });
-      else if (prog) window.scrollTo({ top: prog * maxScroll() });
+      if (el) jump(el.getBoundingClientRect().top + window.scrollY - edges().top - 8);
+      else if (prog) jump(prog * maxScroll());
       lastY = window.scrollY;
       checkShort();
     },
     setEnded(v) { ended = v; },
     destroy() {
       stopAuto();
-      // 아직 저장 안 된 위치가 있으면 화면이 바뀌기 전에 저장
       if (posTimer && body.isConnected) onPosition?.(currentAnchor(), progress());
       clearTimeout(posTimer);
       posTimer = null;

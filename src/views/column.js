@@ -1,25 +1,28 @@
 // 칼럼 읽기 (#/c/<id>)
-//   모바일: 화면 전체를 글에 (탭바 숨김, 내려가면 상단바도 숨김)
+//   모바일: 화면 전체를 글에 (탭바 숨김, 위·아래 바는 가운데 탭으로)
 //   PC: 왼쪽 목록 + 오른쪽 글
 import { html, mount, onAction, toast } from '../lib/dom.js';
 import { errorMessage } from '../lib/supabase.js';
 import { navigate } from '../router.js';
-import { FONTS, loadFont } from '../lib/fonts.js';
-import { getView, cssVars, themeColors } from '../lib/view.js';
-import { getPrefs, applyPrefs } from '../lib/prefs.js';
 import { loadColumns, cachedColumns, columnById, fetchMd, signImages, fmtDate } from '../lib/columns.js';
 import { loadReading, getReading, saveReading, statusOf } from '../lib/progress.js';
+import { getView } from '../lib/view.js';
 import { buildArticle, paintColors, lazyImages } from '../lib/reader-html.js';
+import { applyReaderTheme, resetReaderTheme, appDark } from '../lib/readerTheme.js';
+import { createSearch } from '../lib/search.js';
+import { armFullscreen } from '../lib/fullscreen.js';
 import { attachReader } from '../components/readerControls.js';
+import { createChrome } from '../components/readerChrome.js';
 import { openViewSettings, closeViewSettings, viewSettingsOpen } from '../components/viewSettings.js';
-import { icon, textSizeIcon } from '../components/icons.js';
+import { icon } from '../components/icons.js';
 import { getPane, revealActive, filteredColumns, listState } from './columns.js';
 
 const wide = () => matchMedia('(min-width: 1024px)').matches;
-export const appDark = () => {
-  const t = document.documentElement.dataset.theme;
-  return t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
-};
+export { appDark };
+
+// 읽는 데 걸리는 시간 (한국어 1분에 약 500자)
+export const readMinutes = (chars) => Math.max(1, Math.round(chars / 500));
+export const kChars = (n) => (n >= 10000 ? `${(n / 10000).toFixed(1).replace(/\.0$/, '')}만 자` : n >= 1000 ? `${Math.round(n / 1000)}천 자` : `${n}자`);
 
 export function renderColumn(view, app, id) {
   const cleanups = [];
@@ -43,59 +46,17 @@ export function renderColumn(view, app, id) {
   window.scrollTo(0, 0);
 
   const scope = 'column';
-  const col0 = columnById(id);
+  let col = columnById(id);
   mount(host, html`
     <div class="reader" data-reader-root>
-      <div class="reader-bar" data-bar>
-        <a href="#/columns" class="rb-btn rb-back" aria-label="목록으로">${icon('back', 24)}</a>
-        <span class="rb-title" data-title>${col0?.title || ''}</span>
-        <button type="button" class="rb-btn" data-action="auto" aria-pressed="false" aria-label="자동 스크롤" title="자동 스크롤">${icon('play', 20)}</button>
-        <button type="button" class="rb-btn" data-action="settings" aria-label="보기 설정" title="보기 설정">${textSizeIcon(24)}</button>
-        <span class="reader-progress" data-progress></span>
-      </div>
       <div class="reader-main"><div class="reader-inner" data-inner>
         <p style="color:var(--r-muted);padding:40px 0">불러오는 중…</p>
       </div></div>
     </div>`);
   const root = host.querySelector('[data-reader-root]');
-  const bar = host.querySelector('[data-bar]');
-  const progEl = host.querySelector('[data-progress]');
   const inner = host.querySelector('[data-inner]');
 
-  // ---------- 보기 설정 적용 ----------
-  let bodyEl = null;
-  const applyView = () => {
-    const v = getView(scope);
-    loadFont(v.font);
-    const vars = cssVars(v, (FONTS[v.font] || FONTS.nanumGothic).stack, appDark());
-    for (const [k, val] of Object.entries(vars)) root.style.setProperty(k, val);
-    const c = themeColors(v, appDark());
-    if (bodyEl) paintColors(bodyEl, c.bg, c.fg);
-    document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute('content', c.bg));
-    if (getPrefs().sameAsBody) applyPrefs();
-  };
-  applyView();
-  cleanups.push(() => applyPrefs());   // 앱 화면 색 되돌리기
-  const mq = matchMedia('(prefers-color-scheme: dark)');
-  const onScheme = () => applyView();
-  mq.addEventListener('change', onScheme);
-  cleanups.push(() => mq.removeEventListener('change', onScheme));
-
-  let ctrl = null;
-  cleanups.push(onAction(host, {
-    settings() { openViewSettings({ scope, appDark, onChange: applyView }); },
-    auto() { ctrl?.toggleAuto(); },
-    async toggleRead() {
-      const r = getReading('column', id);
-      if (statusOf(r) === 'read') saveReading('column', id, { finished_at: null, anchor: null, progress: 0 });
-      else saveReading('column', id, { finished_at: true });
-      drawEnd();
-    },
-  }));
-  cleanups.push(() => closeViewSettings());
-
-  // ---------- 내용 ----------
-  let col = col0;
+  // ---------- 이전·다음 글 (목록에서 고른 대구분·검색 순서) ----------
   let neighbors = { prev: null, next: null };
   const computeNeighbors = () => {
     const all = cachedColumns() || [];
@@ -104,16 +65,75 @@ export function renderColumn(view, app, id) {
     const i = list.findIndex((c) => c.id === id);
     neighbors = { prev: i > 0 ? list[i - 1] : null, next: i >= 0 && i < list.length - 1 ? list[i + 1] : null };
   };
+  const navOf = (c) => (c ? { href: `#/c/${encodeURIComponent(c.id)}`, label: c.title } : null);
+
+  // ---------- 보기 설정 ----------
+  let bodyEl = null;
+  let search = null;
+  let chars = 0;
+  const applyView = () => {
+    const c = applyReaderTheme([root], scope);
+    if (bodyEl) paintColors(bodyEl, c.bg, c.fg);
+  };
+  applyView();
+  cleanups.push(resetReaderTheme);
+  const mq = matchMedia('(prefers-color-scheme: dark)');
+  mq.addEventListener('change', applyView);
+  cleanups.push(() => mq.removeEventListener('change', applyView));
+  cleanups.push(armFullscreen());
+
+  // ---------- 위·아래 바 ----------
+  let ctrl = null;
+  const info = () => {
+    if (!col) return '';
+    const r = getReading('column', id);
+    const p = Math.round((ctrl?.progress() || 0) * 100);
+    return html`
+      <span class="ri-small">칼럼 · ${col.category || ''}</span>
+      <span class="ri-title">${col.title}</span>
+      <div class="ri-grid">
+        <div class="ri-stat"><span>올린 날</span><b>${fmtDate(col.published_at)}</b></div>
+        <div class="ri-stat"><span>분량</span><b>${chars ? `${kChars(chars)} · 약 ${readMinutes(chars)}분` : '…'}</b></div>
+      </div>
+      <div class="ri-bar"><span>이 글<em style="font-style:normal;color:var(--r-muted)">${p}%</em></span><i><b style="width:${p}%"></b></i></div>
+      ${(col.tags || []).length ? html`<div class="ri-tags">${col.tags.map((t) => html`<span>#${t}</span>`)}</div>` : ''}
+      <div class="ri-foot"><span>${col.author || ''} · ${statusOf(r) === 'read' ? '읽음' : statusOf(r) === 'reading' ? '읽는 중' : '안 읽음'}</span>
+        ${col.source_url ? html`<a href="${col.source_url}" target="_blank" rel="noopener noreferrer">원문 보기 ↗</a>` : ''}</div>`;
+  };
+  computeNeighbors();
+  const chrome = createChrome(root, {
+    backHref: '#/columns', backLabel: '목록으로', backClass: 'rb-back',
+    small: col ? `칼럼 · ${col.category || ''}` : '칼럼', title: col?.title || '',
+    info,
+    prev: navOf(neighbors.prev), next: navOf(neighbors.next), prevText: '이전 글', nextText: '다음 글',
+    onSettings: () => openViewSettings({ scope, appDark, onChange: applyView }),
+    onAuto: () => ctrl?.toggleAuto(),
+    onPin: () => ctrl?.setChrome(true),   // 고정을 바꾸면 지금은 보이는 상태로 맞춤
+    onSeek: (p) => ctrl?.seek(p),
+    onSearch: (q) => search?.run(q) || 0,
+    onSearchStep: (d) => (d === 0 ? search?.go(0, chrome.edges().top) : d > 0 ? search?.next(chrome.edges().top) : search?.prev(chrome.edges().top)) ?? -1,
+    onSearchClose: () => search?.clear(),
+  });
+  cleanups.push(() => chrome.destroy());
+  cleanups.push(() => closeViewSettings());
+
+  cleanups.push(onAction(root, {
+    toggleRead() {
+      const r = getReading('column', id);
+      if (statusOf(r) === 'read') saveReading('column', id, { finished_at: null, anchor: null, progress: 0 });
+      else saveReading('column', id, { finished_at: true });
+      drawEnd();
+    },
+  }));
 
   const endEl = document.createElement('footer');
   endEl.className = 'reader-end';
   function drawEnd() {
     if (!col) return;
     const read = statusOf(getReading('column', id)) === 'read';
-    computeNeighbors();
     mount(endEl, html`
       <div class="re-actions">
-        <button type="button" class="re-btn ${read ? 'is-on' : ''}" data-action="toggleRead" aria-pressed="${read}">
+        <button type="button" class="re-btn ${read ? 'is-on' : ''}" data-action="toggleRead" aria-pressed="${String(read)}">
           ${icon('check', 18, 2.4)}${read ? '읽음' : '다 읽음으로 표시'}</button>
         ${col.source_url ? html`<a class="re-btn" href="${col.source_url}" target="_blank" rel="noopener noreferrer">원문 보기 ${icon('external', 16)}</a>` : ''}
       </div>
@@ -135,7 +155,9 @@ export function renderColumn(view, app, id) {
           <a href="#/columns" class="re-btn" style="align-self:flex-start">목록으로</a></div>`);
         return;
       }
-      host.querySelector('[data-title]').textContent = col.title;
+      computeNeighbors();
+      chrome.setTitle(`칼럼 · ${col.category || ''}`, col.title);
+      chrome.setNav(navOf(neighbors.prev), navOf(neighbors.next));
       document.title = `${col.title} · 서재`;
       const [md] = await Promise.all([fetchMd(col), loadReading().catch(() => null)]);
       if (!alive) return;
@@ -144,7 +166,9 @@ export function renderColumn(view, app, id) {
       const { el, images } = buildArticle(md, { known, links: col.links || {} });
       el.className = 'reader-body';
       bodyEl = el;
+      chars = (el.textContent || '').replace(/\s+/g, '').length;
 
+      // 칼럼은 본문 위 대구분·제목·날짜 유지
       mount(inner, html`
         <header class="reader-head">
           <div class="rh-cat">${col.category || ''}</div>
@@ -154,70 +178,65 @@ export function renderColumn(view, app, id) {
       inner.append(el, endEl);
       drawEnd();
       applyView();
+      search = createSearch(el);
+      cleanups.push(() => search.clear());
 
-      // 이미지: 화면 가까이 오면 서명 주소로
       if (images.length) cleanups.push(lazyImages(el, signImages));
 
-      // ---------- 조작 · 위치 ----------
       ctrl = attachReader({
         body: el,
-        tapArea: host.querySelector('.reader-main'),
+        tapArea: root,
         getView: () => getView(scope),
-        topOffset: () => bar.offsetHeight,
+        edges: () => chrome.edges(),
+        isPinned: () => chrome.pinned,
+        onScrollNow: (p) => chrome.setProgress(p),
         onPosition(anchor, p) {
-          progEl.style.width = `${Math.round(p * 100)}%`;
           const r = getReading('column', id);
           if (!r && p < 0.02) return;   // 열자마자 나가면 기록 안 함
           saveReading('column', id, { anchor, progress: p });
         },
         onEnd() {
-          const r = getReading('column', id);
-          if (statusOf(r) !== 'read') {
+          if (statusOf(getReading('column', id)) !== 'read') {
             saveReading('column', id, { finished_at: true, progress: 1 });
             drawEnd();
             toast('끝까지 읽어서 읽음으로 표시했어요.');
           }
         },
-        onChrome(v) {
-          if (wide() && !v && !ctrl?.autoRunning) return;   // PC 는 자동 스크롤 때만 숨김
-          if (v) bar.removeAttribute('data-hidden'); else bar.setAttribute('data-hidden', '');
-        },
-        onAutoChange(on) {
-          const b = host.querySelector('[data-action="auto"]');
-          b.setAttribute('aria-pressed', String(on));
-          mount(b, icon(on ? 'pause' : 'play', 20));
-        },
+        onChrome: (v) => chrome.setVisible(v),
+        onAutoChange: (on) => chrome.setAuto(on),
         onKey: {
           next: () => neighbors.next && navigate(`/c/${encodeURIComponent(neighbors.next.id)}`),
           prev: () => neighbors.prev && navigate(`/c/${encodeURIComponent(neighbors.prev.id)}`),
-          back: () => { if (!viewSettingsOpen() && !wide()) navigate('/columns'); },
+          search: () => chrome.openSearch(),
+          back: () => { if (!viewSettingsOpen() && !chrome.searching && !wide()) navigate('/columns'); },
         },
       });
       cleanups.push(() => ctrl.destroy());
+      chrome.setVisible(true);
 
       const r = getReading('column', id);
       const wasRead = statusOf(r) === 'read';
       if (!wasRead && (r?.anchor || r?.progress)) {
         // 위쪽 이미지가 늦게 로드돼도 읽던 문단에 머물도록, 사용자가 움직이기 전까지 다시 맞춤
-        let pinned = true;
+        let pinnedPos = true;
         let pinnedY = -1;
-        const unpin = () => { pinned = false; };
+        const unpin = () => { pinnedPos = false; };
         ['wheel', 'touchstart', 'keydown', 'mousedown'].forEach((e) => window.addEventListener(e, unpin, { once: true, passive: true }));
         const again = () => {
-          if (!pinned || !alive) return;
-          if (pinnedY >= 0 && Math.abs(window.scrollY - pinnedY) > 40) { pinned = false; return; }   // 그새 움직였으면 그대로 둠
+          if (!pinnedPos || !alive) return;
+          if (pinnedY >= 0 && Math.abs(window.scrollY - pinnedY) > 40) { pinnedPos = false; return; }
           ctrl.restore(r.anchor, r.progress);
           pinnedY = window.scrollY;
         };
         requestAnimationFrame(again);
         el.addEventListener('load', again, true);
-        setTimeout(() => { pinned = false; el.removeEventListener('load', again, true); }, 4000);
+        setTimeout(() => { pinnedPos = false; el.removeEventListener('load', again, true); }, 4000);
         toast('읽던 곳부터 이어서 보여드려요.');
       } else {
         ctrl.refresh();
       }
       if (wasRead) ctrl.setEnded(true);
-      progEl.style.width = `${Math.round(ctrl.progress() * 100)}%`;
+      chrome.setProgress(ctrl.progress());
     } catch (err) {
       if (!alive) return;
       mount(inner, html`<div style="padding:48px 0;display:flex;flex-direction:column;gap:12px">

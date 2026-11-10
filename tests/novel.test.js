@@ -30,3 +30,32 @@ test('이어 읽기 대상', () => {
   assert.equal(lastOpened({ a: { updated_at: '2026-01-01' }, b: { updated_at: '2026-02-01' } }), '2026-02-01');
   assert.equal(chapterLabel(ch[2]), '[작품] 2화');
 });
+
+import { filterNovels, normalizeTag } from '../src/lib/novelText.js';
+import { resolveWeight } from '../src/lib/fonts.js';
+
+const NV = [
+  { id: 'a', genre: '로맨스 판타지', tags: ['회귀', '아카데미'] },
+  { id: 'b', genre: '로맨스 판타지', tags: ['회귀', '계약결혼'] },
+  { id: 'c', genre: '판타지', tags: ['회귀', '헌터'] },
+  { id: 'd', genre: null, tags: [] },
+];
+test('장르 하나 + 태그 모두 포함(AND)', () => {
+  assert.deepEqual(filterNovels(NV).list.map((n) => n.id), ['a', 'b', 'c', 'd']);
+  assert.deepEqual(filterNovels(NV, { genre: '로맨스 판타지' }).list.map((n) => n.id), ['a', 'b']);
+  assert.deepEqual(filterNovels(NV, { tags: ['회귀'] }).list.map((n) => n.id), ['a', 'b', 'c']);
+  assert.deepEqual(filterNovels(NV, { tags: ['회귀', '아카데미'] }).list.map((n) => n.id), ['a']);
+  const f = filterNovels(NV, { genre: '로맨스 판타지' });
+  assert.deepEqual(f.genres, [{ name: '로맨스 판타지', count: 2 }, { name: '판타지', count: 1 }]);
+  assert.deepEqual(f.tags[0], { name: '회귀', count: 2 });
+  assert.ok(!f.tags.some((t) => t.name === '헌터'));   // 지금 조건 밖의 태그는 숨김
+});
+test('태그 정리 · 글꼴 두께', () => {
+  assert.equal(normalizeTag('  ##회귀  '), '회귀');
+  assert.equal(normalizeTag('계약   결혼'), '계약 결혼');
+  assert.equal(resolveWeight('notoSerif', 'thin'), 300);
+  assert.equal(resolveWeight('nanumGothic', 'thin'), null);
+  assert.equal(resolveWeight('nanumGothic', 'bold'), 700);
+  assert.equal(resolveWeight('notoSerif', 'bold'), 600);
+  assert.equal(resolveWeight('gowunDodum', 'bold'), null);
+});

@@ -57,7 +57,7 @@ function createPane() {
       <div class="sticky top-0 z-10 bg-bg lg:bg-surface">
         <header class="h-16 px-5 lg:px-5 flex items-center gap-2">
           <h1 class="m-0 flex-1 text-[22px] font-bold">칼럼</h1>
-          <button type="button" data-action="search" aria-label="검색" aria-pressed="${p.searching}"
+          <button type="button" data-action="search" aria-label="검색" aria-pressed="${String(p.searching)}"
             class="w-11 h-11 rounded-full border-0 bg-transparent text-ink cursor-pointer flex items-center justify-center hover-mouse:bg-chip ${p.searching ? 'bg-chip' : ''}">${icon('search')}</button>
         </header>
         ${p.searching ? html`
@@ -67,13 +67,13 @@ function createPane() {
           </div>` : ''}
         <div class="flex gap-1.5 overflow-x-auto px-5 pb-2.5 [scrollbar-width:none]" role="group" aria-label="대구분">
           ${[{ name: '', label: '전체', count: cols.length }, ...cats.map((c) => ({ ...c, label: c.name }))].map((c) => html`
-            <button type="button" data-action="cat" data-v="${c.name}" aria-pressed="${st.cat === c.name}"
+            <button type="button" data-action="cat" data-v="${c.name}" aria-pressed="${String(st.cat === c.name)}"
               class="shrink-0 h-9 px-3 rounded-full text-[13px] cursor-pointer whitespace-nowrap ${st.cat === c.name ? 'bg-ink text-bg border border-ink font-bold' : 'bg-transparent text-ink border border-line hover-mouse:bg-chip'}">
               ${c.label} <span class="${st.cat === c.name ? 'opacity-70' : 'text-muted'}">${c.count}</span></button>`)}
         </div>
         <div class="flex items-center gap-1 px-5 pb-2 border-b border-line text-[13px]">
           ${FILTERS.map(([k, l]) => html`
-            <button type="button" data-action="filter" data-v="${k}" aria-pressed="${st.filter === k}"
+            <button type="button" data-action="filter" data-v="${k}" aria-pressed="${String(st.filter === k)}"
               class="h-8 px-2.5 rounded-lg border-0 cursor-pointer ${st.filter === k ? 'bg-chip text-ink font-bold' : 'bg-transparent text-muted hover-mouse:text-ink'}">${l}</button>`)}
           <span class="flex-1"></span>
           <button type="button" data-action="sort" class="h-8 px-2 rounded-lg border-0 bg-transparent text-muted cursor-pointer hover-mouse:text-ink">${st.sort === 'new' ? '최신순' : '오래된순'}</button>

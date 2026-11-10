@@ -50,3 +50,22 @@ export function lastOpened(readingByKey) {
   for (const r of Object.values(readingByKey)) if (!t || String(r.updated_at) > t) t = String(r.updated_at);
   return t;
 }
+
+// 태그 정리: '#'·앞뒤 공백 제거, 안쪽 공백 하나로 (서버 admin_update_novel 과 같은 규칙)
+export const normalizeTag = (s) => String(s || '').trim().replace(/^#+/, '').trim().replace(/\s+/g, ' ');
+
+/**
+ * 소설 목록 거르기: 대표 장르 하나 + 태그 여러 개(모두 포함)
+ * 반환: { list, genres: [{name,count}], tags: [{name,count}] }  (개수는 지금 조건 기준)
+ */
+export function filterNovels(novels, { genre = '', tags = [] } = {}) {
+  const inGenre = genre ? novels.filter((n) => n.genre === genre) : novels;
+  const list = inGenre.filter((n) => tags.every((t) => (n.tags || []).includes(t)));
+  const gc = new Map();
+  for (const n of novels) if (n.genre) gc.set(n.genre, (gc.get(n.genre) || 0) + 1);
+  const tc = new Map();
+  for (const n of list) for (const t of n.tags || []) tc.set(t, (tc.get(t) || 0) + 1);
+  for (const t of tags) if (!tc.has(t)) tc.set(t, 0);
+  const sort = (m) => [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'ko')).map(([name, count]) => ({ name, count }));
+  return { list, genres: sort(gc), tags: sort(tc) };
+}

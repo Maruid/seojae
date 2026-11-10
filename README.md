@@ -74,9 +74,26 @@ insert into public.grants(user_id, sector)
    (본문의 naver.me 단축 링크를 펼쳐 `links` 를 채움. 내용이 같은 글은 파일을 다시 올리지 않고 정보만 갱신)
 3. 이 저장소 push → Actions 배포
 
+## 읽기 화면 v2 · 소설 정보 적용 순서 (한 번만)
+
+1. Supabase SQL Editor 에서 `supabase/migration_003_novel_meta.sql` 실행 (소설 작가·대표 장르·태그 + 관리자 저장 함수)
+2. 이 저장소 push → 배포
+3. 앱 **관리 › 소설 정보** 에서 소설마다 작가·장르·태그 입력
+4. 안드로이드 설치 앱은 하단 바 색(manifest)이 바뀌었으니 **앱을 지우고 다시 설치**해야 바로 반영됨
+
 ## 콘텐츠 업로드
 
 이 저장소가 아니라 로컬 `seojae-sync` 폴더의 `upload.py` 로 올립니다 (secret key 는 그 폴더 `.env` 에만).
+
+```bash
+python upload.py --dry-run                          # 무엇이 올라갈지 확인
+python upload.py                                    # 칼럼 + 소설 (바뀐 것만)
+python upload.py --replace "바바.txt" --dry-run     # 소설 하나를 지우고 새로 올릴 때: 먼저 확인
+python upload.py --replace "바바.txt"               # 회차·회차 파일·그 소설 읽기 기록 삭제 후 전부 다시 (y 확인)
+```
+- 소설은 **파일 이름**으로 구분 (`novels_map.json`: 파일 이름 → 소설 ID). 제목이 같아도 파일 이름이 다르면 다른 소설
+- 일반 업로드는 원본에서 사라진 회차를 DB 에 남겨 둠 → 회차를 정리하려면 `--replace`
+- `--replace` 해도 소설 ID·작가·장르·태그는 유지
 
 ## 로컬 개발
 
@@ -93,3 +110,4 @@ npm test                     # escape · 라우터 · 권한별 탭 · 본문 �
 - [x] 2단계 칼럼: 목록 · 읽기 · 보기 설정 · 읽음 처리 · 자기 글 링크 (migration_002 필요)
 - [x] 3단계 소설: 목록 · 회차 목록 · 읽기 · 다음 회차 미리 받기 (DB 변경 없음)
 - [x] 4단계 관리자 + PWA: 승인/권한 화면, 앱 설치, 오프라인 캐시, 새 버전 배너
+- [x] 읽기 화면 v2: 반투명 위·아래 바, 고정, 진행 막대 + % 입력, 정보 팝업, 글 안 검색, 줄 단위 즉시 넘기기, 전체 화면, 글자 두께 / 소설 작가·장르·태그 + 목록 필터 (migration_003)

@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#F5F4F0" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#15171A" media="(prefers-color-scheme: dark)">
   <meta name="robots" content="noindex, nofollow">
+  <meta name="color-scheme" content="light dark">
   <title>서재</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="/manifest.webmanifest">
@@ -23,7 +24,11 @@
     try {
       var m = localStorage.getItem('ui:mode') || 'auto';
       if (m !== 'auto') document.documentElement.dataset.theme = m;
+      var dark = m === 'dark' || (m === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.style.background = dark ? '#15171A' : '#F5F4F0';
     } catch (e) {}
+    // 안드로이드에 설치한 앱: 하단 시스템 바 위에서 화면 아래 모서리를 둥글게 (app.css .android-chin)
+    if (/Android/.test(navigator.userAgent)) document.documentElement.classList.add('android');
   </script>
 </head>
 <body>

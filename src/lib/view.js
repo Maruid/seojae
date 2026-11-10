@@ -20,6 +20,7 @@ const BASE = {
   paraGap: 0,          // 문단 간격 (줄 단위)
   align: 'left', track: 'normal', indent: false,
   tapPaging: true, speed: 4,
+  weight: 'normal',     // thin | normal | bold
 };
 
 export const DEFAULTS = {
@@ -84,7 +85,7 @@ export function themeColors(v, appDark = false) {
 }
 
 // 읽기 화면 루트에 거는 CSS 변수
-export function cssVars(v, fontStack, appDark) {
+export function cssVars(v, fontStack, appDark, weight = 400) {
   const c = themeColors(v, appDark);
   const tracks = { narrow: '-0.02em', normal: '0', wide: '0.04em' };
   return {
@@ -96,6 +97,8 @@ export function cssVars(v, fontStack, appDark) {
     '--r-align': v.align === 'justify' ? 'justify' : 'left',
     '--r-track': tracks[v.track] || '0',
     '--r-indent': v.indent ? '1em' : '0',
+    '--r-weight': String(weight || 400),
+    '--r-glass': `color-mix(in srgb, ${c.bg} 80%, transparent)`,
   };
 }
 

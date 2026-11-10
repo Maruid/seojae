@@ -7,6 +7,7 @@ import { html, mount, onAction, toast } from '../lib/dom.js';
 import { rpc, errorMessage } from '../lib/supabase.js';
 import { fmtDate } from '../lib/columns.js';
 import { icon } from '../components/icons.js';
+import { createNovelAdmin } from './adminNovels.js';
 
 const FILTERS = [['all', '전체'], ['pending', '대기'], ['approved', '이용 중'], ['blocked', '차단']];
 const LIMIT = { db: 500 * 1024 * 1024, storage: 1024 * 1024 * 1024 };
@@ -52,6 +53,8 @@ export function renderAdmin(view, app, { onPendingChange } = {}) {
   let q = '';
   let filter = sessionStorage.getItem('ui:adminFilter') || 'all';
   let menuFor = null;          // ⋯ 메뉴가 열린 user_id
+  let tab = sessionStorage.getItem('ui:adminTab') || 'users';   // users | novels
+  const nv = createNovelAdmin(() => { if (view.isConnected) draw(); });
   const busy = new Set();      // 저장 중인 user_id
   const sectors = (app.me.sectors || []).filter((s) => s.key);
   const myId = app.session?.user?.id;
@@ -88,7 +91,7 @@ export function renderAdmin(view, app, { onPendingChange } = {}) {
           ${u.is_admin ? html`<span class="ad-badge is-admin">관리자</span>` : statusBadge(u)}
           ${!self && !u.is_admin && u.status !== 'pending' ? html`
             <div class="ad-more">
-              <button type="button" class="ad-dots" data-action="menu" data-id="${u.user_id}" aria-label="더보기" aria-expanded="${menuFor === u.user_id}">⋯</button>
+              <button type="button" class="ad-dots" data-action="menu" data-id="${u.user_id}" aria-label="더보기" aria-expanded="${String(menuFor === u.user_id)}">⋯</button>
               ${menuFor === u.user_id ? html`
                 <div class="ad-menu" role="menu">
                   ${u.status === 'approved'
@@ -103,7 +106,7 @@ export function renderAdmin(view, app, { onPendingChange } = {}) {
             <span>열람 권한</span>
             ${sectors.map((s) => {
               const on = (u.sectors || []).includes(s.key);
-              return html`<button type="button" class="ad-chip ${on ? 'is-on' : ''}" aria-pressed="${on}" data-action="grant" data-id="${u.user_id}" data-sector="${s.key}" ${u.status === 'blocked' ? 'disabled' : ''}>
+              return html`<button type="button" class="ad-chip ${on ? 'is-on' : ''}" aria-pressed="${String(on)}" data-action="grant" data-id="${u.user_id}" data-sector="${s.key}" ${u.status === 'blocked' ? 'disabled' : ''}>
                 ${on ? icon('check', 14, 2.6) : ''}${s.name}</button>`;
             })}
           </div>
@@ -136,11 +139,23 @@ export function renderAdmin(view, app, { onPendingChange } = {}) {
   const draw = () => {
     const c = counts();
     const list = visible();
-    mount(view, html`
+    const head = html`
       <header class="h-16 px-5 lg:px-12 lg:pt-6 flex items-center gap-2">
         <h1 class="m-0 flex-1 text-[22px] font-bold">관리</h1>
         <button type="button" data-action="reload" class="h-9 px-3 rounded-[10px] border border-line bg-transparent text-[13px] cursor-pointer hover-mouse:bg-chip">새로고침</button>
       </header>
+      <div class="px-5 lg:px-12 pb-3 max-w-[880px]">
+        <div role="tablist" aria-label="관리 항목" class="grid grid-cols-2 gap-1 p-1 rounded-xl bg-chip">
+          ${[['users', `사용자${c.pending ? ` · 대기 ${c.pending}` : ''}`], ['novels', '소설 정보']].map(([k, l]) => html`
+            <button type="button" role="tab" aria-selected="${String(tab === k)}" data-action="tab" data-v="${k}"
+              class="h-9 rounded-[10px] border-0 text-sm cursor-pointer ${tab === k ? 'bg-surface text-ink font-bold shadow-sm' : 'bg-transparent text-muted'}">${l}</button>`)}
+        </div>
+      </div>`;
+    if (tab === 'novels') {
+      mount(view, html`${head}<div class="px-5 lg:px-12 pb-10 max-w-[880px] flex flex-col gap-4">${nv.render()}</div>`);
+      return;
+    }
+    mount(view, html`${head}
       <div class="px-5 lg:px-12 pb-10 max-w-[880px] flex flex-col gap-4">
         ${usage()}
         <div class="flex flex-col gap-2.5 sticky top-0 z-10 bg-bg pt-1 pb-2">
@@ -152,7 +167,7 @@ export function renderAdmin(view, app, { onPendingChange } = {}) {
           </label>
           <div class="flex gap-1.5 overflow-x-auto [scrollbar-width:none]" role="group" aria-label="상태">
             ${FILTERS.map(([k, l]) => html`
-              <button type="button" data-action="filter" data-v="${k}" aria-pressed="${filter === k}"
+              <button type="button" data-action="filter" data-v="${k}" aria-pressed="${String(filter === k)}"
                 class="shrink-0 h-9 px-3 rounded-full text-[13px] cursor-pointer ${filter === k ? 'bg-ink text-bg border border-ink font-bold' : 'bg-transparent text-ink border border-line hover-mouse:bg-chip'}">
                 ${l} <span class="${filter === k ? 'opacity-70' : 'text-muted'}">${c[k]}</span></button>`)}
           </div>
@@ -196,7 +211,14 @@ export function renderAdmin(view, app, { onPendingChange } = {}) {
     () => rpc('admin_set_status', { p_user: id, p_status: status }), msg);
 
   onAction(view, {
-    reload() { load(); },
+    reload() { if (tab === 'novels') nv.load(true); else load(); },
+    tab(b) {
+      tab = b.dataset.v;
+      try { sessionStorage.setItem('ui:adminTab', tab); } catch {}
+      if (tab === 'novels' && !nv.loaded) nv.load();
+      draw();
+    },
+    ...nv.handlers,
     filter(b) { filter = b.dataset.v; try { sessionStorage.setItem('ui:adminFilter', filter); } catch {} draw(); },
     menu(b) { menuFor = menuFor === b.dataset.id ? null : b.dataset.id; draw(); },
     approve(b) { setStatus(b.dataset.id, 'approved', `${find(b.dataset.id).display_name || '사용자'} 님을 승인했어요.`); },
@@ -240,7 +262,12 @@ export function renderAdmin(view, app, { onPendingChange } = {}) {
   const outside = (e) => { if (menuFor && !e.target.closest('.ad-more')) { menuFor = null; draw(); } };
   document.addEventListener('click', outside, true);
 
+  view.addEventListener('keydown', (e) => nv.onKeydown(e, view));
+  view.addEventListener('input', (e) => nv.onInput(e, view));
+  view.addEventListener('submit', (e) => nv.onSubmit(e, view));
+
   draw();
   load();
+  if (tab === 'novels') nv.load();
   return () => document.removeEventListener('click', outside, true);
 }

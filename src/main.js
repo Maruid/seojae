@@ -18,6 +18,7 @@ import { startReadingSync } from './lib/progress.js';
 import { renderAdmin } from './views/admin.js';
 import { renderInstall } from './views/install.js';
 import { initPwa } from './lib/pwa.js';
+import { exitFullscreen } from './lib/fullscreen.js';
 
 // 앱 전역 상태
 const app = {
@@ -74,6 +75,8 @@ async function route(r) {
 
   // 3) 앱 화면
   const reading = r.name === 'column' || r.name === 'chapter';
+  // 전체 화면은 글·회차를 넘길 때만 유지하고, 목록·홈으로 나가면 풂
+  if (!reading) exitFullscreen();
   const wide = matchMedia('(min-width: 1024px)').matches;
   const shellOpts = { immersive: reading, compact: ['columns', 'column', 'chapter'].includes(r.name) && wide };
   app.redrawShell = () => renderShell(app, r.name, shellOpts);
@@ -113,6 +116,7 @@ async function route(r) {
 
 async function boot() {
   applyPrefs();
+  document.documentElement.style.background = '';   // 첫 화면 깜빡임 방지용 임시 배경 → 이제 CSS 가 맡음
   initPwa();
   // 뒤로 가기 때 브라우저가 스크롤을 멋대로 옮기면 읽던 위치가 잘못 저장됨 → 직접 관리
   if ('scrollRestoration' in history) history.scrollRestoration = 'manual';

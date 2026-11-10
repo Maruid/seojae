@@ -14,9 +14,10 @@ export const novelById = (id) => (cachedNovels() || []).find((n) => n.id === id)
 
 export async function loadNovels({ force = false } = {}) {
   if (!force && novels && Date.now() - novelsAt < 120_000) return novels;
-  const { data, error } = await supabase.from('novels')
-    .select('id,title,chapter_count,last_added_at,key_mode,updated_at')
-    .order('last_added_at', { ascending: false, nullsFirst: false });
+  const q = (cols) => supabase.from('novels').select(cols).order('last_added_at', { ascending: false, nullsFirst: false });
+  let { data, error } = await q('id,title,author,genre,tags,chapter_count,last_added_at,key_mode,updated_at');
+  // migration_003 적용 전이면 작가·장르·태그 칸이 없음 → 없는 채로라도 목록은 보이게
+  if (error?.code === '42703') ({ data, error } = await q('id,title,chapter_count,last_added_at,key_mode,updated_at'));
   if (error) { if (cachedNovels()) return novels; throw error; }
   novels = data;
   novelsAt = Date.now();
@@ -70,3 +71,7 @@ export function fetchChapterText(ch) {
   return job;
 }
 export const prefetchChapter = (ch) => { if (ch) fetchChapterText(ch).catch(() => {}); };
+
+// 회차 정렬 (회차 목록 화면과 읽기 화면의 회차 패널이 같은 설정을 씀, 소설별·기기별)
+export function chapterSortDesc(id) { try { return localStorage.getItem(`ui:nvSort:${id}`) === 'desc'; } catch { return false; } }
+export function setChapterSortDesc(id, desc) { try { localStorage.setItem(`ui:nvSort:${id}`, desc ? 'desc' : 'asc'); } catch {} }
