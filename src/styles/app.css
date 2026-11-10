@@ -232,3 +232,36 @@ body:has(.shell[data-immersive]) #toast { bottom: calc(24px + env(safe-area-inse
 .vs-switch[aria-checked="true"] { background: var(--accent); }
 .vs-switch i { position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: left .15s; }
 .vs-switch[aria-checked="true"] i { left: 23px; }
+
+/* 링크 카드 (네이버 se-oglink) */
+.reader-body .se-oglink { margin: 18px 0; }
+.reader-body .se-module-oglink {
+  position: relative; display: flex; flex-direction: column; overflow: hidden;
+  border: 1px solid var(--r-line); border-radius: 14px; background: color-mix(in srgb, var(--r-chip) 45%, var(--r-bg));
+  font-family: var(--app-font); text-align: left; letter-spacing: 0;
+}
+.reader-body .se-module-oglink a { text-decoration: none; color: inherit; }
+.reader-body .se-oglink-thumbnail { position: relative; display: block; aspect-ratio: 1.91 / 1; max-height: 300px; background: var(--r-chip); overflow: hidden; }
+.reader-body .se-oglink-thumbnail img { display: block; width: 100%; height: 100%; min-height: 0; margin: 0; border-radius: 0; object-fit: cover; }
+.reader-body .se-oglink-thumbnail:has(img.r-img-fail) { display: none; }
+.reader-body .se-oglink-info { display: block; padding: 12px 14px 13px; }
+.reader-body .se-oglink-info-container { display: flex; flex-direction: column; gap: 4px; }
+.reader-body .se-oglink-title { font-size: 15px; font-weight: 700; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.reader-body .se-module-oglink p { margin: 0; min-height: 0; text-indent: 0; }
+.reader-body .se-oglink-summary { font-size: 13px; line-height: 1.5; color: var(--r-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.reader-body .se-oglink-url { font-size: 12px; color: var(--r-muted); margin-top: 2px !important; }
+.reader-body .r-og-internal .se-oglink-url { color: var(--accent); font-weight: 700; }
+.reader-body .se-oglink-thumbnail-video-icon { position: absolute; inset: 0; margin: auto; width: 52px; height: 52px; border-radius: 50%; background: rgba(0,0,0,.55); }
+.reader-body .se-oglink-thumbnail-video-icon::after { content: ""; position: absolute; left: 21px; top: 16px; border-left: 16px solid #fff; border-top: 10px solid transparent; border-bottom: 10px solid transparent; }
+@media (hover: hover) and (pointer: fine) { .reader-body .se-module-oglink:hover { border-color: var(--r-muted); } }
+
+/* 영상 삽입 → 카드 */
+.reader-body .r-embed {
+  position: relative; display: flex; flex-direction: column; gap: 4px; margin: 18px 0; padding: 14px 14px 14px 68px; min-height: 64px;
+  justify-content: center; border: 1px solid var(--r-line); border-radius: 14px; text-decoration: none; color: inherit;
+  background: color-mix(in srgb, var(--r-chip) 45%, var(--r-bg)); font-family: var(--app-font);
+}
+.reader-body .r-embed-play { position: absolute; left: 14px; top: 50%; margin-top: -20px; width: 40px; height: 40px; border-radius: 50%; background: var(--r-fg); }
+.reader-body .r-embed-play::after { content: ""; position: absolute; left: 16px; top: 12px; border-left: 12px solid var(--r-bg); border-top: 8px solid transparent; border-bottom: 8px solid transparent; }
+.reader-body .r-embed-title { font-size: 15px; font-weight: 700; line-height: 1.4; }
+.reader-body .r-embed-src { font-size: 12px; color: var(--r-muted); }

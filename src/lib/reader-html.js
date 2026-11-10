@@ -14,8 +14,33 @@ const REMOVE = [
   '.se-module-oglink .se-oglink-thumbnail-resource:empty', '.u_likeit_list_module', '.font_resize_wrap',
 ];
 
+// 영상 삽입(se-oembed)은 iframe 이라 정리 과정에서 빠짐 → 정리 전에 모듈 데이터(주소·제목)를 읽어 둠
+function readEmbeds(body) {
+  const out = {};
+  if (!body.includes('oembed')) return out;
+  const doc = new DOMParser().parseFromString(body, 'text/html');   // 실행·로딩 없는 문서
+  doc.querySelectorAll('script.__se_module_data').forEach((sc) => {
+    try {
+      const m = JSON.parse(sc.getAttribute('data-module-v2') || sc.getAttribute('data-module') || '{}');
+      if (!/oembed/.test(m.type || '')) return;
+      const d = m.data || {};
+      const src = (String(d.html || '').match(/src=["']([^"']+)/) || [])[1];
+      out[m.id] = {
+        url: d.inputUrl || d.url || src || '',
+        title: d.title || '',
+        provider: d.providerName || '',
+        thumb: d.thumbnailUrl || '',
+      };
+    } catch {}
+  });
+  return out;
+}
+
+const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
+
 export function buildArticle(mdText, ctx) {
   const body = extractBody(mdText);
+  const embeds = readEmbeds(body);
   const frag = DOMPurify.sanitize(body, {
     RETURN_DOM_FRAGMENT: true,
     FORBID_TAGS: ['style', 'form', 'input', 'button', 'textarea', 'select', 'iframe', 'object', 'embed'],
@@ -44,6 +69,37 @@ export function buildArticle(mdText, ctx) {
     a.setAttribute('href', r.href);
     if (r.internal) { a.removeAttribute('target'); a.dataset.internal = '1'; }
     else { a.setAttribute('target', '_blank'); a.setAttribute('rel', 'noopener noreferrer'); }
+  });
+
+  // 링크 카드(se-oglink): 주소 표시 정리 (naver.me → 실제 사이트 / 서재 글이면 "서재에서 읽기")
+  frag.querySelectorAll('.se-module-oglink').forEach((mod) => {
+    const info = mod.querySelector('a.se-oglink-info');
+    const urlEl = mod.querySelector('.se-oglink-url');
+    if (!mod.querySelector('.se-oglink-thumbnail img')) mod.classList.add('r-og-noimg');
+    if (!info || !urlEl) return;
+    if (info.dataset.internal) { urlEl.textContent = '서재에서 읽기'; mod.classList.add('r-og-internal'); }
+    else if (info.getAttribute('href')) urlEl.textContent = hostOf(info.getAttribute('href')) || urlEl.textContent;
+  });
+
+  // 영상 삽입 → 새 창으로 여는 카드
+  frag.querySelectorAll('.se-oembed').forEach((comp) => {
+    const e = embeds[comp.id];
+    if (!e?.url || !/^https?:/i.test(e.url)) { comp.remove(); return; }
+    const a = document.createElement('a');
+    a.className = 'r-embed';
+    a.href = e.url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    const t = document.createElement('span');
+    t.className = 'r-embed-title';
+    t.textContent = e.title || '영상 보기';
+    const s2 = document.createElement('span');
+    s2.className = 'r-embed-src';
+    s2.textContent = `${e.provider || hostOf(e.url)} · 새 창에서 보기`;
+    const play = document.createElement('span');
+    play.className = 'r-embed-play';
+    a.append(play, t, s2);
+    comp.replaceChildren(a);
   });
 
   // 이미지
