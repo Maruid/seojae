@@ -49,6 +49,7 @@ export function chapterNo(c) {
 // 번호 칸과 함께 보여 줄 제목: 제목 앞의 "12화."·"제12화 -"·"12편 ·" 는 번호 칸과 겹치니 뗌
 export function chapterRest(c) {
   const label = chapterLabel(c);
+  if (c?.key === 'intro') return label === '프롤로그' ? '' : label;   // 번호 칸에 이미 "프롤로그"
   const no = chapterNo(c);
   if (no == null) return label;
   const re = new RegExp(`^\\s*(?:제\\s*)?0*${no}\\s*(?:화|편)\\s*[.:·\\-~)\\]]*\\s*`);
@@ -102,20 +103,44 @@ export function lastOpened(readingByKey) {
 }
 
 // 태그 정리: '#'·앞뒤 공백 제거, 안쪽 공백 하나로 (서버 admin_update_novel 과 같은 규칙)
-export const normalizeTag = (s) => String(s || '').trim().replace(/^#+/, '').trim().replace(/\s+/g, ' ');
+// 태그: 앞의 '#' 과 모든 공백 제거 ("#현대 판타지" → "현대판타지")
+export const normalizeTag = (s) => String(s || '').replace(/^\s*#+/, '').replace(/\s+/g, '');
+// 장르: 앞뒤 공백 정리 (가운데 띄어쓰기는 유지: "현대 판타지")
+export const normalizeGenre = (s) => String(s || '').trim().replace(/\s+/g, ' ');
 
 /**
- * 소설 목록 거르기: 대표 장르 하나 + 태그 여러 개(모두 포함)
+ * 붙여 넣은 글을 여러 개로 나눔: 쉼표 · 탭 · 줄바꿈 · '/' (태그는 '#' 앞에서도 나눔: "#회귀 #먼치킨")
+ * 반환: 정리된 값 목록 (빈 값·중복 제거, 순서 유지)
+ */
+export function splitList(text, { tag = false } = {}) {
+  let parts = String(text || '').split(/[,，、\t\n\r/]+/);
+  if (tag) parts = parts.flatMap((p) => p.split(/(?=#)/));
+  const norm = tag ? normalizeTag : normalizeGenre;
+  const out = [];
+  for (const p of parts) {
+    const v = norm(p);
+    if (v && !out.includes(v)) out.push(v);
+  }
+  return out;
+}
+
+// 소설의 장르 목록 (예전 데이터는 genre 한 칸)
+export const genresOf = (n) => (n?.genres?.length ? n.genres : n?.genre ? [n.genre] : []);
+
+/**
+ * 소설 목록 거르기: 장르 여러 개 + 태그 여러 개 (고른 것이 모두 들어간 소설만)
  * 반환: { list, genres: [{name,count}], tags: [{name,count}] }  (개수는 지금 조건 기준)
  */
-export function filterNovels(novels, { genre = '', tags = [] } = {}) {
-  const inGenre = genre ? novels.filter((n) => n.genre === genre) : novels;
-  const list = inGenre.filter((n) => tags.every((t) => (n.tags || []).includes(t)));
-  const gc = new Map();
-  for (const n of novels) if (n.genre) gc.set(n.genre, (gc.get(n.genre) || 0) + 1);
-  const tc = new Map();
-  for (const n of list) for (const t of n.tags || []) tc.set(t, (tc.get(t) || 0) + 1);
-  for (const t of tags) if (!tc.has(t)) tc.set(t, 0);
-  const sort = (m) => [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'ko')).map(([name, count]) => ({ name, count }));
-  return { list, genres: sort(gc), tags: sort(tc) };
+export function filterNovels(novels, { genres = [], tags = [], genre = '' } = {}) {
+  const want = genre && !genres.length ? [genre] : genres;
+  const list = novels.filter((n) => want.every((g) => genresOf(n).includes(g)) && tags.every((t) => (n.tags || []).includes(t)));
+  const count = (pick, chosen) => {
+    const m = new Map();
+    for (const n of list) for (const v of pick(n)) m.set(v, (m.get(v) || 0) + 1);
+    // 지금 조건에서 0개여도 데이터에 있는 이름은 보여 줌 (눌러 볼 수 없게만)
+    for (const n of novels) for (const v of pick(n)) if (!m.has(v)) m.set(v, 0);
+    for (const v of chosen) if (!m.has(v)) m.set(v, 0);
+    return [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'ko')).map(([name, count]) => ({ name, count }));
+  };
+  return { list, genres: count(genresOf, want), tags: count((n) => n.tags || [], tags).filter((t) => t.count || tags.includes(t.name)) };
 }

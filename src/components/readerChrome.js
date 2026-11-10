@@ -59,7 +59,8 @@ export function createChrome(root, opts) {
   let mode = 'pct';           // pct | ch
   let typed = '';
   let msg = null;             // { text, near?: { n, label } }
-  let closedAt = 0;           // 바깥을 눌러 패널을 닫은 시각 (그 탭으로 페이지가 넘어가지 않게)
+  let closedAt = 0;
+  let seekFresh = false;      // 패널을 막 열었을 때만 떠오르는 애니메이션 (숫자를 누를 때마다 깜빡이지 않게)           // 바깥을 눌러 패널을 닫은 시각 (그 탭으로 페이지가 넘어가지 않게)
 
   // ---------- 위 바 ----------
   const drawTop = () => {
@@ -119,7 +120,7 @@ export function createChrome(root, opts) {
     const unit = ch ? '화' : '%';
     const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'del', '0', 'close'];
     return html`
-      <div class="rd-seek" role="dialog" aria-label="위치 이동" data-no-tap>
+      <div class="rd-seek ${seekFresh ? 'is-enter' : ''}" role="dialog" aria-label="위치 이동" data-no-tap>
         <div class="sk-gauge">
           <input type="range" min="0" max="1000" value="${Math.round(pct * 1000)}" data-input="seek" aria-label="읽는 위치">
           <b data-cur>${pv}%</b>
@@ -201,7 +202,9 @@ export function createChrome(root, opts) {
   const openSeek = (on) => {
     seekOpen = on; typed = ''; msg = null;
     if (on) { infoOpen = false; drawPop(); }
+    seekFresh = on;
     drawFoot();
+    seekFresh = false;
   };
   const runGo = () => {
     const n = parseInt(typed, 10);

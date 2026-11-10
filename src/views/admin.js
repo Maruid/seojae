@@ -165,7 +165,7 @@ export function renderAdmin(view, app, { onPendingChange } = {}) {
             <input type="search" data-input="q" value="${q}" placeholder="이름·이메일 검색"
               class="w-full h-11 pl-10 pr-3 rounded-xl border border-line bg-surface text-ink outline-none focus:border-muted">
           </label>
-          <div class="flex gap-1.5 overflow-x-auto [scrollbar-width:none]" role="group" aria-label="상태">
+          <div class="relative flex gap-1.5 overflow-x-auto [scrollbar-width:none]" data-keep-scroll="status" role="group" aria-label="상태">
             ${FILTERS.map(([k, l]) => html`
               <button type="button" data-action="filter" data-v="${k}" aria-pressed="${String(filter === k)}"
                 class="shrink-0 h-9 px-3 rounded-full text-[13px] cursor-pointer ${filter === k ? 'bg-ink text-bg border border-ink font-bold' : 'bg-transparent text-ink border border-line hover-mouse:bg-chip'}">

@@ -24,6 +24,10 @@ const MESSAGES = {
   INVALID_STATUS: '잘못된 상태 값이에요.',
   INVALID_NAME: '이름은 1~40자로 입력해 주세요.',
   CANNOT_CHANGE_SELF: '내 계정은 차단하거나 대기로 바꿀 수 없어요.',
+  TOO_MANY_GENRES: '장르는 10개까지 넣을 수 있어요.',
+  GENRE_TOO_LONG: '장르는 하나에 30자까지예요.',
+  TOO_MANY_TAGS: '태그는 20개까지 넣을 수 있어요.',
+  TAG_TOO_LONG: '태그는 하나에 20자까지예요.',
 };
 
 export function errorMessage(err) {

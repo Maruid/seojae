@@ -77,6 +77,8 @@ insert into public.grants(user_id, sector)
 ## 읽기 화면 v2 · 소설 정보 적용 순서 (한 번만)
 
 1. Supabase SQL Editor 에서 `supabase/migration_003_novel_meta.sql` 실행 (소설 작가·대표 장르·태그 + 관리자 저장 함수)
+1. Supabase SQL Editor 에서 `supabase/migration_004_genres_cover.sql` 실행 (장르 여러 개 + 표지 칸, 다시 실행해도 안전)
+1. 표지를 쓰려면 동기화 폴더에서 `pip install pillow` 한 번
 2. 이 저장소 push → 배포
 3. 앱 **관리 › 소설 정보** 에서 소설마다 작가·장르·태그 입력
 4. 안드로이드 설치 앱은 하단 바 색(manifest)이 바뀌었으니 **앱을 지우고 다시 설치**해야 바로 반영됨
@@ -90,6 +92,9 @@ python upload.py --dry-run                          # 무엇이 올라갈지 확
 python upload.py                                    # 칼럼 + 소설 (바뀐 것만)
 python upload.py --replace "바바.txt" --dry-run     # 소설 하나를 지우고 새로 올릴 때: 먼저 확인
 python upload.py --replace "바바.txt"               # 회차·회차 파일·그 소설 읽기 기록 삭제 후 전부 다시 (y 확인)
+python inspect_novels.py                            # 분할 규칙이 바뀌었을 때: 소설별로 어떻게 나뉘는지 먼저 확인
+python upload.py --replace-all --dry-run            # 모든 소설을 지우고 새로 올릴 때: 먼저 확인
+python upload.py --replace-all                      # "모두 지움" 입력해야 진행 (칼럼은 그대로)
 ```
 - 소설은 **파일 이름**으로 구분 (`novels_map.json`: 파일 이름 → 소설 ID). 제목이 같아도 파일 이름이 다르면 다른 소설
 - 일반 업로드는 원본에서 사라진 회차를 DB 에 남겨 둠 → 회차를 정리하려면 `--replace`
@@ -111,3 +116,4 @@ npm test                     # escape · 라우터 · 권한별 탭 · 본문 �
 - [x] 3단계 소설: 목록 · 회차 목록 · 읽기 · 다음 회차 미리 받기 (DB 변경 없음)
 - [x] 4단계 관리자 + PWA: 승인/권한 화면, 앱 설치, 오프라인 캐시, 새 버전 배너
 - [x] 읽기 화면 v2: 반투명 위·아래 바, 고정, 진행 막대 + % 입력, 정보 팝업, 글 안 검색, 줄 단위 즉시 넘기기, 전체 화면, 글자 두께 / 소설 작가·장르·태그 + 목록 필터 (migration_003)
+- [x] 소설 표지(같은 이름 이미지 → upload.py) + 바둑판형 목록, 장르 여러 개 (migration_004) / 섞인 회차 제목 형식 인식 · 보류 · --force / --split

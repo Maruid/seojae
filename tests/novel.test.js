@@ -31,7 +31,7 @@ test('이어 읽기 대상', () => {
   assert.equal(chapterLabel(ch[2]), '[작품] 2화');
 });
 
-import { filterNovels, normalizeTag } from '../src/lib/novelText.js';
+import { filterNovels, normalizeTag, splitList, genresOf } from '../src/lib/novelText.js';
 import { resolveWeight } from '../src/lib/fonts.js';
 
 const NV = [
@@ -45,14 +45,23 @@ test('장르 하나 + 태그 모두 포함(AND)', () => {
   assert.deepEqual(filterNovels(NV, { genre: '로맨스 판타지' }).list.map((n) => n.id), ['a', 'b']);
   assert.deepEqual(filterNovels(NV, { tags: ['회귀'] }).list.map((n) => n.id), ['a', 'b', 'c']);
   assert.deepEqual(filterNovels(NV, { tags: ['회귀', '아카데미'] }).list.map((n) => n.id), ['a']);
-  const f = filterNovels(NV, { genre: '로맨스 판타지' });
-  assert.deepEqual(f.genres, [{ name: '로맨스 판타지', count: 2 }, { name: '판타지', count: 1 }]);
+  const f = filterNovels(NV, { genres: ['로맨스 판타지'] });
+  assert.deepEqual(f.genres, [{ name: '로맨스 판타지', count: 2 }, { name: '판타지', count: 0 }]);
   assert.deepEqual(f.tags[0], { name: '회귀', count: 2 });
   assert.ok(!f.tags.some((t) => t.name === '헌터'));   // 지금 조건 밖의 태그는 숨김
 });
+test('장르 여러 개 (모두 포함)', () => {
+  const M = [{ id: 'a', genres: ['무협', '판타지'], tags: [] }, { id: 'b', genres: ['무협'], tags: [] }, { id: 'c', genre: '판타지', tags: [] }];
+  assert.deepEqual(genresOf(M[2]), ['판타지']);
+  assert.deepEqual(filterNovels(M, { genres: ['무협'] }).list.map((n) => n.id), ['a', 'b']);
+  assert.deepEqual(filterNovels(M, { genres: ['무협', '판타지'] }).list.map((n) => n.id), ['a']);
+  assert.deepEqual(filterNovels(M, { genres: ['판타지'] }).list.map((n) => n.id), ['a', 'c']);
+});
 test('태그 정리 · 글꼴 두께', () => {
   assert.equal(normalizeTag('  ##회귀  '), '회귀');
-  assert.equal(normalizeTag('계약   결혼'), '계약 결혼');
+  assert.equal(normalizeTag('계약   결혼'), '계약결혼');
+  assert.deepEqual(splitList('#회귀 #먼치킨, 성장\t현대 판타지/회귀', { tag: true }), ['회귀', '먼치킨', '성장', '현대판타지']);
+  assert.deepEqual(splitList(' 무협, 현대 판타지\n로맨스/무협 '), ['무협', '현대 판타지', '로맨스']);
   assert.equal(resolveWeight('notoSerif', 'thin'), 300);
   assert.equal(resolveWeight('nanumGothic', 'thin'), null);
   assert.equal(resolveWeight('nanumGothic', 'bold'), 700);

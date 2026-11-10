@@ -141,19 +141,24 @@ export function openViewSettings({ scope, appDark, onChange }) {
     const a = document.activeElement;
     const focusKey = a && root.contains(a) ? [a.dataset.action, a.dataset.k, a.dataset.v, a.dataset.i].join('|') : null;
 
-    mount(root, html`
-      <div class="vs-backdrop" data-action="close"></div>
-      <section class="vs-panel" role="dialog" aria-label="보기 설정" tabindex="-1">
-        <header class="vs-head">
-          <div class="vs-tabs" role="tablist">
-            <button type="button" role="tab" aria-selected="${String(tab === 'basic')}" data-action="tab" data-v="basic">일반 설정</button>
-            <button type="button" role="tab" aria-selected="${String(tab === 'adv')}" data-action="tab" data-v="adv">고급 설정</button>
-          </div>
-          <button type="button" class="vs-x" data-action="close" aria-label="닫기">${icon('close', 18)}</button>
-        </header>
-        <p class="vs-scope">${meta.separate ? (scope === 'column' ? '칼럼' : '소설') : '칼럼·소설 공통'} · 이 기기</p>
-        <div class="vs-body">${tab === 'adv' ? advanced(v, meta) : basic(v, meta)}</div>
-      </section>`);
+    // 창 틀은 처음 한 번만 만들고, 바꿀 때는 안쪽만 다시 그림 (떠오르는 애니메이션이 다시 돌며 깜빡이지 않게)
+    if (!root.querySelector('.vs-panel')) {
+      mount(root, html`
+        <div class="vs-backdrop" data-action="close"></div>
+        <section class="vs-panel" role="dialog" aria-label="보기 설정" tabindex="-1">
+          <header class="vs-head"></header>
+          <p class="vs-scope"></p>
+          <div class="vs-body"></div>
+        </section>`);
+    }
+    mount(root.querySelector('.vs-head'), html`
+      <div class="vs-tabs" role="tablist">
+        <button type="button" role="tab" aria-selected="${String(tab === 'basic')}" data-action="tab" data-v="basic">일반 설정</button>
+        <button type="button" role="tab" aria-selected="${String(tab === 'adv')}" data-action="tab" data-v="adv">고급 설정</button>
+      </div>
+      <button type="button" class="vs-x" data-action="close" aria-label="닫기">${icon('close', 18)}</button>`);
+    root.querySelector('.vs-scope').textContent = `${meta.separate ? (scope === 'column' ? '칼럼' : '소설') : '칼럼·소설 공통'} · 이 기기`;
+    mount(root.querySelector('.vs-body'), tab === 'adv' ? advanced(v, meta) : basic(v, meta));
     root.style.setProperty('--vs-bg', c.sheet);
     root.style.setProperty('--vs-fg', c.fg);
     root.style.setProperty('--vs-muted', c.muted);

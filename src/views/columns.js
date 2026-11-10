@@ -65,7 +65,7 @@ function createPane() {
             <input type="search" data-input="q" value="${st.q}" placeholder="제목·태그 검색" aria-label="제목·태그 검색" enterkeyhint="search"
               class="w-full h-11 px-3.5 rounded-xl border border-line bg-surface lg:bg-bg text-ink outline-none focus:border-muted">
           </div>` : ''}
-        <div class="flex gap-1.5 overflow-x-auto px-5 pb-2.5 [scrollbar-width:none]" role="group" aria-label="대구분">
+        <div class="relative flex gap-1.5 overflow-x-auto px-5 pb-2.5 [scrollbar-width:none]" data-keep-scroll="cats" role="group" aria-label="대구분">
           ${[{ name: '', label: '전체', count: cols.length }, ...cats.map((c) => ({ ...c, label: c.name }))].map((c) => html`
             <button type="button" data-action="cat" data-v="${c.name}" aria-pressed="${String(st.cat === c.name)}"
               class="shrink-0 h-9 px-3 rounded-full text-[13px] cursor-pointer whitespace-nowrap ${st.cat === c.name ? 'bg-ink text-bg border border-ink font-bold' : 'bg-transparent text-ink border border-line hover-mouse:bg-chip'}">

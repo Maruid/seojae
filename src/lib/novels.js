@@ -15,8 +15,9 @@ export const novelById = (id) => (cachedNovels() || []).find((n) => n.id === id)
 export async function loadNovels({ force = false } = {}) {
   if (!force && novels && Date.now() - novelsAt < 120_000) return novels;
   const q = (cols) => supabase.from('novels').select(cols).order('last_added_at', { ascending: false, nullsFirst: false });
-  let { data, error } = await q('id,title,author,genre,tags,chapter_count,last_added_at,key_mode,updated_at');
-  // migration_003 적용 전이면 작가·장르·태그 칸이 없음 → 없는 채로라도 목록은 보이게
+  // 마이그레이션이 덜 됐으면(칸 없음 42703) 있는 칸만으로라도 목록은 보이게: 004(장르 목록·표지) → 003(작가·장르·태그) → 기본
+  let { data, error } = await q('id,title,author,genre,genres,tags,cover_path,chapter_count,last_added_at,key_mode,updated_at');
+  if (error?.code === '42703') ({ data, error } = await q('id,title,author,genre,tags,chapter_count,last_added_at,key_mode,updated_at'));
   if (error?.code === '42703') ({ data, error } = await q('id,title,chapter_count,last_added_at,key_mode,updated_at'));
   if (error) { if (cachedNovels()) return novels; throw error; }
   novels = data;
