@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+.DS_Store
+
+# 원본 콘텐츠·업로드 도구는 이 저장소(public)에 절대 넣지 않음
+column_backup_data/
+novels_report.json
+novels_map.json
+*.md.bak
