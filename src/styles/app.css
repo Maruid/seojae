@@ -782,3 +782,13 @@ html.is-fs .reader-main { padding-left: max(var(--r-pad), env(safe-area-inset-le
 .nv-lrow .nv-cover-ph { padding: 5px; }
 .nv-lrow .nv-cover-ph b { font-size: 10px; line-height: 1.25; -webkit-line-clamp: 4; }
 .nv-card.is-small .nv-cover-ph b { font-size: 11.5px; }
+
+/* 관리 › 소설 정보: 장르 목록에서 고르기 + 자동완성 (v2.7) */
+.nv-gsug { display: flex; flex-wrap: wrap; gap: 6px; }
+.nv-gsug:empty { display: none; }
+.nv-gs { height: 32px; padding: 0 12px; border-radius: 99px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; cursor: pointer; }
+.nv-gs.is-on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; font-weight: 700; }
+.nv-gs.is-tag { color: var(--muted); border-style: dashed; }
+.nv-gpal { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px; border-radius: 12px; background: var(--chip); }
+.nv-gp { height: 30px; padding: 0 11px; border-radius: 99px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: 12.5px; cursor: pointer; }
+.nv-gp.is-on { background: var(--ink); border-color: var(--ink); color: var(--bg); font-weight: 700; }

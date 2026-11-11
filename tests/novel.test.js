@@ -116,3 +116,16 @@ test('소설 상태 · 정렬', () => {
   assert.deepEqual(sortNovels(L, 'title', () => null).map((x) => x.id), ['b', 'a', 'c']);
   assert.deepEqual(sortNovels(L, 'count', () => null).map((x) => x.id), ['b', 'a', 'c']);
 });
+
+import { canonGenre, suggestGenres, DEFAULT_GENRES, DEFAULT_ALIAS } from '../src/lib/genres.js';
+test('장르 목록: 띄어쓰기 무시 · 별칭 · 자동완성', () => {
+  const st = { list: DEFAULT_GENRES, alias: DEFAULT_ALIAS };
+  assert.equal(canonGenre('현대 판타지', st), '현대판타지');
+  assert.equal(canonGenre('현판', st), '현대판타지');
+  assert.equal(canonGenre('sf', st), 'SF');
+  assert.equal(canonGenre('퓨전무협', st), null);
+  assert.deepEqual(suggestGenres('현', [], st).picks.slice(0, 2), ['현대판타지', '현대']);
+  assert.deepEqual(suggestGenres('판타', ['판타지'], st).picks, ['현대판타지', '로맨스판타지']);
+  assert.deepEqual(suggestGenres('로판', [], st).picks, ['로맨스판타지']);
+  assert.deepEqual(suggestGenres('퓨전무협', [], st), { picks: [], contained: ['무협', '퓨전'] });
+});

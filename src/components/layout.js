@@ -5,8 +5,16 @@ import { tabsFor, activeTab } from '../lib/nav.js';
 import { icon } from './icons.js';
 
 let shell = null;   // { root, content, nav, side }
+let last = null;    // 마지막 renderShell 인자 (창 폭이 바뀌면 사이드바만 다시 그림)
 
-export function renderShell(app, routeName, { immersive = false, compact = false } = {}) {
+// 칼럼·회차 읽기처럼 목록+본문을 나란히 두는 화면은 창이 좁은 PC(1024~1399px)에서만 아이콘 사이드바
+const NARROW_PC = '(min-width: 1024px) and (max-width: 1399.98px)';
+const narrowMq = matchMedia(NARROW_PC);
+narrowMq.addEventListener('change', () => { if (shell && last) renderShell(...last); });
+
+export function renderShell(app, routeName, { immersive = false, narrowable = false } = {}) {
+  last = [app, routeName, { immersive, narrowable }];
+  const compact = narrowable && narrowMq.matches;
   const tabs = tabsFor(app.me);
   const active = activeTab(tabs, routeName);
   const badge = (t) => (t.key === 'admin' && app.pendingCount

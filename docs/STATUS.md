@@ -1,6 +1,6 @@
 # 서재 (seojae) 진행 현황 정리
 
-> 2026-11-11 기준 · 웹 v2.6 · upload.py / inspect_novels.py / novel_sources.py 최신 (폴더·EPUB·--meta)
+> 2026-11-11 기준 · 웹 v2.7 · upload.py / inspect_novels.py / novel_sources.py 최신 (폴더·EPUB·--meta)
 > 세부 규칙은 `docs/PROJECT_GUIDE.md`, 설치·배포는 `README.md`를 봅니다. 이 문서는 지금까지 만든 것을 한눈에 보는 요약입니다.
 
 ---
@@ -85,6 +85,14 @@
 - **맨 위 · 맨 아래 바로 가기**: 소설 목록 · 회차 목록. 스크롤하면 나타났다 2초 뒤 사라짐, 회차 목록은 "읽던 회차" 버튼도
 - **표지 크게 보기**: 소설 상세에서 표지를 누르면 화면에 맞춰 크게 (확대·축소 없음). 큰 표지(`cover_large_path`)가 있으면 그것, 없으면 목록용 표지 → 업로더 구현 사양: `docs/COVER_LARGE_SPEC.md`
 - **칼럼 탭**: 분류 칩 줄 → **분류 선택 상자**. 읽기 상태와 정렬은 바깥 한 줄 그대로
+
+### v2.7 장르 정리
+- 장르는 **정해진 18개 목록**에서만 (판타지, 현대판타지, 무협, 로맨스, 로맨스판타지, 라이트노벨, SF, 대체역사, 스포츠, 공포, 미스터리, 추리, BL, GL, 현대, 퓨전, 게임, 역사). 별칭 현판·로판·호러
+- 다중 장르 그대로 (최대 10개). `genre` 한 칸은 예전 앱 호환용 = 첫 장르
+- `migration_007_genre_list.sql`: 목록·별칭 표, `clean_genres()`, novels 트리거(어디서 저장해도 자동 정리: 띄어쓰기 무시 · 별칭 바꾸기 · 목록에 없는 건 태그로)
+- 기존 데이터 정리: `supabase/tools/genre_cleanup_1_preview.sql`(미리 보기) → `genre_cleanup_2_apply.sql`(적용)
+- 관리 › 소설 편집: 장르를 **목록 버튼에서 고르기 + 타이핑 자동완성**(앞부분·중간·별칭, ↑↓ Enter). 목록에 없는 말은 "#… 태그로 넣기", 붙여 넣은 여러 개도 자동 분류. 편집을 열면 예전 장르(현대 판타지 등)도 목록 이름으로 맞춤
+- 업로더 규칙 사양: `docs/GENRE_RULES_SPEC.md`
 
 ### 목록 공통
 - 다시 그려도 가로 칩 줄 스크롤 위치 유지(관리 상태 등)
@@ -175,7 +183,9 @@ python upload.py --only meta --meta 소설정보.txt [--dry-run]   # 작가·장
 - [ ] `pip install pillow`
 - [ ] `novel_sources.py` 를 upload.py 옆에 두고 `python inspect_novels.py` 로 폴더·EPUB 점검
 - [ ] `python upload.py --replace "사채왕의 천재손자.txt" --replace "약먹는 천재마법사.txt"` (나누는 방식이 바뀜 → 이 두 편의 읽기 기록은 초기화)
-- [ ] 웹 v2.6 적용 후 관리 › 소설 정보에서 장르·태그 정리 (또는 `--meta`)
+- [ ] Supabase에서 `migration_007_genre_list.sql` 실행 → `tools/genre_cleanup_1_preview.sql` 로 확인 → `tools/genre_cleanup_2_apply.sql` 적용
+- [ ] 장르 없어진 소설은 관리 › 소설 편집에서 골라 넣기
+- [ ] 업로더에 장르 규칙 반영 요청 (`docs/GENRE_RULES_SPEC.md`) — 로컬 메타의 옛 장르도 정리
 - [ ] 업로더에 큰 표지 올리기 추가 요청 (`docs/COVER_LARGE_SPEC.md`)
 
 **기기에서 확인**

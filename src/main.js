@@ -77,8 +77,7 @@ async function route(r) {
   const reading = r.name === 'column' || r.name === 'chapter';
   // 전체 화면은 글·회차를 넘길 때만 유지하고, 목록·홈으로 나가면 풂
   if (!reading) exitFullscreen();
-  const wide = matchMedia('(min-width: 1024px)').matches;
-  const shellOpts = { immersive: reading, compact: ['columns', 'column', 'chapter'].includes(r.name) && wide };
+  const shellOpts = { immersive: reading, narrowable: ['columns', 'column', 'chapter'].includes(r.name) };
   app.redrawShell = () => renderShell(app, r.name, shellOpts);
   const view = freshView(renderShell(app, r.name, shellOpts));
   switch (r.name) {
