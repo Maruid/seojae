@@ -96,8 +96,8 @@ async function route(r) {
     case 'novel':
     case 'chapter':
       if (!canAccess(app.me, 'novel')) return renderForbidden(view);
-      if (r.name === 'novels') return renderNovels(view);
-      if (r.name === 'novel') return renderNovel(view, r.params.id);
+      if (r.name === 'novels') { app.cleanup = renderNovels(view, r.query); return; }
+      if (r.name === 'novel') { app.cleanup = renderNovel(view, r.params.id); return; }
       app.cleanup = renderChapter(view, r.params.id, r.params.key);
       return;
     case 'admin':

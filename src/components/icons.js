@@ -28,6 +28,8 @@ const PATHS = {
   minus: '<path d="M6 12h12"/>',
   plus: '<path d="M12 6v12M6 12h12"/>',
   backspace: '<path d="M9 5h11v14H9l-6-7z"/><path d="M12.5 9.5l5 5M17.5 9.5l-5 5"/>',
+  grid: '<rect x="4" y="4" width="7" height="9" rx="1.5"/><rect x="13" y="4" width="7" height="9" rx="1.5"/><path d="M4 17h7M13 17h7M4 20h5M13 20h5"/>',
+  grid3: '<rect x="3.5" y="4" width="4.5" height="7" rx="1"/><rect x="9.75" y="4" width="4.5" height="7" rx="1"/><rect x="16" y="4" width="4.5" height="7" rx="1"/><rect x="3.5" y="13.5" width="4.5" height="7" rx="1"/><rect x="9.75" y="13.5" width="4.5" height="7" rx="1"/><rect x="16" y="13.5" width="4.5" height="7" rx="1"/>',
   list: '<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>',
 };
 

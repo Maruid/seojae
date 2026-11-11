@@ -90,3 +90,29 @@ test('회차 번호: 제목 번호 우선, 없으면 순서, 프롤로그 제외
   assert.equal(chapterRest(seq[1]), '돌아왔다(1)');
   assert.equal(chapterRest(seq[2]), '그날 아침…');
 });
+
+import { parseQuery, matchNovel, novelStatus, sortNovels, hasNew } from '../src/lib/novelText.js';
+test('소설 검색: 여러 단어 모두 · #은 태그만', () => {
+  const n = { title: '시한부 천재가 살아남는 법', author: '청시소', genres: ['퓨전무협', '성장물'], tags: ['회귀', '천재물'] };
+  assert.equal(matchNovel(n, parseQuery('무협 회귀')), true);
+  assert.equal(matchNovel(n, parseQuery('청시소')), true);
+  assert.equal(matchNovel(n, parseQuery('시한부천재')), true);
+  assert.equal(matchNovel(n, parseQuery('#무협')), false);
+  assert.equal(matchNovel(n, parseQuery('#천재')), true);
+  assert.equal(matchNovel(n, parseQuery('무협, 로맨스')), false);
+  assert.equal(matchNovel(n, parseQuery('  ')), true);
+});
+test('소설 상태 · 정렬', () => {
+  const n = { chapter_count: 2, last_added_at: '2026-11-02' };
+  assert.equal(novelStatus(n, {}), 'unread');
+  assert.equal(novelStatus(n, { n0001: { finished_at: 'x' } }), 'reading');
+  assert.equal(novelStatus(n, { intro: { finished_at: 'x' }, n0001: { finished_at: 'x' }, n0002: { finished_at: 'x' } }), 'read');
+  assert.equal(hasNew(n, '2026-11-01'), true);
+  assert.equal(hasNew(n, null), false);
+  const L = [{ id: 'a', title: '나', chapter_count: 5, last_added_at: '2026-01-01' }, { id: 'b', title: '가', chapter_count: 9, last_added_at: '2026-03-01' }, { id: 'c', title: '다', chapter_count: 1, last_added_at: '2026-02-01' }];
+  const opened = { a: '2026-11-05', c: '2026-11-09' };
+  assert.deepEqual(sortNovels(L, 'recent', (x) => opened[x.id]).map((x) => x.id), ['c', 'a', 'b']);
+  assert.deepEqual(sortNovels(L, 'added', () => null).map((x) => x.id), ['b', 'c', 'a']);
+  assert.deepEqual(sortNovels(L, 'title', () => null).map((x) => x.id), ['b', 'a', 'c']);
+  assert.deepEqual(sortNovels(L, 'count', () => null).map((x) => x.id), ['b', 'a', 'c']);
+});

@@ -144,3 +144,54 @@ export function filterNovels(novels, { genres = [], tags = [], genre = '' } = {}
   };
   return { list, genres: count(genresOf, want), tags: count((n) => n.tags || [], tags).filter((t) => t.count || tags.includes(t.name)) };
 }
+
+// ---------------------------------------------------------------------
+// 소설 검색 · 상태 · 정렬 (소설 탭)
+// ---------------------------------------------------------------------
+const fold = (s) => String(s || '').toLowerCase().replace(/[\s#]+/g, '');
+
+// 검색어 → 조각들: 띄어쓰기·쉼표로 나눔, '#'로 시작하면 태그에서만
+export function parseQuery(q) {
+  return String(q || '').split(/[\s,，]+/).filter(Boolean).map((t) => (t.startsWith('#') ? { tag: true, v: fold(t) } : { tag: false, v: fold(t) }))
+    .filter((t) => t.v);
+}
+
+// 조각이 모두 맞아야 함 (제목·작가·장르·태그 중 어디든 / '#' 은 태그만)
+export function matchNovel(n, tokens) {
+  if (!tokens.length) return true;
+  const tags = (n.tags || []).map(fold);
+  const hay = [fold(n.title), fold(n.author), ...genresOf(n).map(fold), ...tags];
+  return tokens.every((t) => (t.tag ? tags : hay).some((h) => h.includes(t.v)));
+}
+
+/**
+ * 소설 하나의 읽기 상태: 'unread' 안 읽음 | 'reading' 읽는 중 | 'read' 다 읽음
+ * rows: 그 소설의 회차 기록 (key → row)
+ */
+export function novelStatus(n, rows) {
+  const keys = Object.keys(rows || {});
+  if (!keys.length) return 'unread';
+  const done = keys.filter((k) => k !== 'intro' && rows[k]?.finished_at).length;
+  return n.chapter_count > 0 && done >= n.chapter_count ? 'read' : 'reading';
+}
+
+// 마지막으로 연 뒤 새 회차가 올라왔나
+export const hasNew = (n, opened) => !!(opened && n.last_added_at && n.last_added_at > opened);
+
+/**
+ * 정렬: recent 최근 읽은 순(안 연 소설은 뒤에 최근 추가 순) | added 최근 추가 순 | title 제목 순 | count 회차 많은 순
+ * openedOf(n) → 마지막으로 연 시각
+ */
+export function sortNovels(list, sort, openedOf) {
+  const byAdded = (a, b) => String(b.last_added_at || '').localeCompare(String(a.last_added_at || ''));
+  const byTitle = (a, b) => String(a.title).localeCompare(String(b.title), 'ko');
+  const out = [...list];
+  if (sort === 'title') return out.sort(byTitle);
+  if (sort === 'count') return out.sort((a, b) => (b.chapter_count || 0) - (a.chapter_count || 0) || byTitle(a, b));
+  if (sort === 'added') return out.sort((a, b) => byAdded(a, b) || byTitle(a, b));
+  return out.sort((a, b) => {
+    const x = openedOf(a) || ''; const y = openedOf(b) || '';
+    if (x || y) return y.localeCompare(x);
+    return byAdded(a, b) || byTitle(a, b);
+  });
+}

@@ -65,11 +65,15 @@ function createPane() {
             <input type="search" data-input="q" value="${st.q}" placeholder="제목·태그 검색" aria-label="제목·태그 검색" enterkeyhint="search"
               class="w-full h-11 px-3.5 rounded-xl border border-line bg-surface lg:bg-bg text-ink outline-none focus:border-muted">
           </div>` : ''}
-        <div class="relative flex gap-1.5 overflow-x-auto px-5 pb-2.5 [scrollbar-width:none]" data-keep-scroll="cats" role="group" aria-label="대구분">
-          ${[{ name: '', label: '전체', count: cols.length }, ...cats.map((c) => ({ ...c, label: c.name }))].map((c) => html`
-            <button type="button" data-action="cat" data-v="${c.name}" aria-pressed="${String(st.cat === c.name)}"
-              class="shrink-0 h-9 px-3 rounded-full text-[13px] cursor-pointer whitespace-nowrap ${st.cat === c.name ? 'bg-ink text-bg border border-ink font-bold' : 'bg-transparent text-ink border border-line hover-mouse:bg-chip'}">
-              ${c.label} <span class="${st.cat === c.name ? 'opacity-70' : 'text-muted'}">${c.count}</span></button>`)}
+        <div class="px-5 pb-2">
+          <label class="col-cat ${st.cat ? 'is-on' : ''}">
+            <span class="sr-only">분류</span>
+            <select data-input="cat" aria-label="분류">
+              <option value="" ${st.cat ? '' : 'selected'}>분류 · 전체 ${cols.length}</option>
+              ${cats.map((c) => html`<option value="${c.name}" ${st.cat === c.name ? 'selected' : ''}>${c.name} ${c.count}</option>`)}
+            </select>
+            ${icon('down', 16)}
+          </label>
         </div>
         <div class="flex items-center gap-1 px-5 pb-2 border-b border-line text-[13px]">
           ${FILTERS.map(([k, l]) => html`
@@ -109,8 +113,10 @@ function createPane() {
     }
   };
 
+  el.addEventListener('change', (e) => {
+    if (e.target.dataset.input === 'cat') { setListState({ cat: e.target.value }); p.draw(); }
+  });
   onAction(el, {
-    cat(b) { setListState({ cat: b.dataset.v }); p.draw(); },
     filter(b) { setListState({ filter: b.dataset.v }); p.draw(); },
     sort() { setListState({ sort: listState().sort === 'new' ? 'old' : 'new' }); p.draw(); },
     search() {
@@ -164,6 +170,9 @@ export function revealActive(p) {
 const wide = () => matchMedia('(min-width: 1024px)').matches;
 
 export function renderColumns(view, app) {
+  // 홈의 "이어 읽기 · 칼럼 › 전체" → 읽는 중
+  const f = app?.route?.query?.f;
+  if (f && FILTERS.some(([k]) => k === f)) { setListState({ filter: f, cat: '', q: '' }); history.replaceState(null, '', '#/columns'); }
   const p = getPane();
   p.activeId = null;
   const savedScroll = p.el.scrollTop;

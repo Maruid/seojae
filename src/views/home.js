@@ -1,39 +1,35 @@
 import { html, mount } from '../lib/dom.js';
-import { supabase } from '../lib/supabase.js';
 import { canAccess } from '../lib/nav.js';
 import { icon } from '../components/icons.js';
 import { initial } from '../components/layout.js';
 import { loadColumns, cachedColumns } from '../lib/columns.js';
 import { loadReading, allReading, statusOf } from '../lib/progress.js';
-import { loadNovels, cachedNovels, cachedChapters } from '../lib/novels.js';
-import { chapterLabel } from '../lib/novelText.js';
+import { loadNovels, cachedNovels } from '../lib/novels.js';
+import { chapterNoLabel, chapterRest } from '../lib/novelText.js';
+import { latestOf, contCached, resolveCont } from '../lib/continue.js';
+import { signCovers } from '../lib/covers.js';
+import { coverBox } from '../components/cover.js';
 
-// 이어 읽기: 권한 있는 섹터에서 읽는 중인 글·회차 중 가장 최근에 본 것
-async function continueItem(me) {
-  const hasCol = canAccess(me, 'column');
-  const hasNov = canAccess(me, 'novel');
-  const rows = Object.values(allReading())
-    .filter((r) => statusOf(r) === 'reading' && ((r.item_kind === 'column' && hasCol) || (r.item_kind === 'chapter' && hasNov)))
-    .sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)));
-  for (const r of rows.slice(0, 5)) {
-    if (r.item_kind === 'column') {
-      const c = (cachedColumns() || []).find((x) => x.id === r.item_id);
-      if (c) return { href: `#/c/${encodeURIComponent(c.id)}`, label: `칼럼 · ${c.category || ''}`, title: c.title, progress: r.progress || 0 };
-    } else {
-      const n = (cachedNovels() || []).find((x) => x.id === r.novel_id);
-      if (!n) continue;
-      const key = r.item_id.slice(r.novel_id.length + 1);
-      let ch = (cachedChapters(n.id) || []).find((c) => c.key === key);
-      if (!ch) {
-        const { data } = await supabase.from('novel_chapters').select('key,title,display_title')
-          .eq('novel_id', n.id).eq('key', key).maybeSingle();
-        ch = data;
-      }
-      if (ch) return { href: `#/n/${encodeURIComponent(n.id)}/${encodeURIComponent(key)}`, label: `소설 · ${n.title}`, title: chapterLabel(ch), progress: r.progress || 0 };
-    }
-  }
-  return null;
-}
+// 이어 읽기 · 소설: 읽던 소설 (최근 순). 마지막 화까지 다 읽은 소설은 빼고, 새 회차가 올라오면 다시
+const contNovels = (me) => {
+  if (!canAccess(me, 'novel')) return [];
+  return (cachedNovels() || [])
+    .map((n) => ({ n, b: latestOf(n.id) }))
+    .filter((x) => x.b)
+    .sort((a, b) => String(b.b.r.updated_at).localeCompare(String(a.b.r.updated_at)))
+    .slice(0, 20)
+    .map(({ n }) => ({ n, c: contCached(n) }));
+};
+// 이어 읽기 · 칼럼: 읽는 중인 글 (최근 순, 최대 5개)
+const contColumns = (me) => {
+  if (!canAccess(me, 'column')) return [];
+  const byId = new Map((cachedColumns() || []).map((c) => [c.id, c]));
+  return Object.values(allReading())
+    .filter((r) => r.item_kind === 'column' && statusOf(r) === 'reading' && byId.has(r.item_id))
+    .sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)))
+    .slice(0, 5)
+    .map((r) => ({ c: byId.get(r.item_id), progress: r.progress || 0 }));
+};
 
 const fmtDate = (iso) => {
   const d = new Date(iso);
@@ -41,13 +37,12 @@ const fmtDate = (iso) => {
 };
 
 async function loadStats(me) {
-  const out = { columns: null, unread: null, novels: null, chapters: null, recent: [], cont: null };
+  const out = { columns: null, unread: null, novels: null, chapters: null, recent: [] };
   const jobs = [loadReading().catch(() => null)];
   if (canAccess(me, 'column')) jobs.push(loadColumns().then((cols) => fillColumns(out, cols)));
   if (canAccess(me, 'novel')) jobs.push(loadNovels().then((ns) => fillNovels(out, ns)));
   await Promise.allSettled(jobs);
   if (out.columns != null) fillColumns(out, cachedColumns());   // 읽기 기록이 늦게 와도 안 읽음 수 다시
-  out.cont = await continueItem(me).catch(() => null);
   return out;
 }
 
@@ -80,15 +75,39 @@ export async function renderHome(view, app) {
         </div>` : html`
       <section class="flex flex-col gap-3">
         <h2 class="m-0 text-[15px] lg:text-[28px] font-bold text-muted lg:text-ink">이어 읽기</h2>
-        ${st.cont ? html`
-          <a href="${st.cont.href}" class="no-underline bg-hero text-hero-ink rounded-[18px] p-5 flex flex-col gap-2.5 hover-mouse:opacity-95">
-            <span class="text-xs text-hero-muted">${st.cont.label}</span>
-            <span class="text-[18px] lg:text-[20px] font-bold leading-snug">${st.cont.title}</span>
-            <span class="flex items-center gap-3 text-xs text-hero-muted">
-              <span class="flex-1 h-1 rounded-full bg-white/15 overflow-hidden"><span class="block h-full bg-accent" style="width:${Math.max(4, Math.round(st.cont.progress * 100))}%"></span></span>
-              ${Math.round(st.cont.progress * 100)}% · 이어 읽기 ›</span>
-          </a>` : html`
-        <div class="rounded-[18px] border border-dashed border-line p-5 text-sm text-muted">읽던 글이 생기면 여기에서 바로 이어 읽을 수 있어요.</div>`}
+        ${(() => {
+          const ns = contNovels(me).filter((x) => !x.c?.done);
+          const cs = contColumns(me);
+          if (!ns.length && !cs.length) return html`<div class="rounded-[18px] border border-dashed border-line p-5 text-sm text-muted">읽던 글이 생기면 여기에서 바로 이어 읽을 수 있어요.</div>`;
+          return html`
+            ${ns.length ? html`
+              <div class="hm-sub"><span>소설</span><a href="#/novels?status=reading">전체 ›</a></div>
+              <div class="hm-shelf" data-keep-scroll="shelf">
+                ${ns.map(({ n, c }) => {
+                  const href = c ? `#/n/${encodeURIComponent(n.id)}/${encodeURIComponent(c.chapter.key)}` : `#/n/${encodeURIComponent(n.id)}`;
+                  const no = c ? chapterNoLabel(c.chapter) || chapterRest(c.chapter) : '';
+                  const pct = c ? Math.round(c.progress * 100) : 0;
+                  return html`
+                  <a class="hm-book" href="${href}" aria-label="${n.title} 이어 읽기">
+                    <span class="hm-book-c">${coverBox(n, { cls: 'is-sm' })}
+                      ${c?.newCount ? html`<span class="nv-badge">새 ${c.newCount}</span>` : ''}
+                      ${c && !c.fresh ? html`<span class="nv-card-p"><i style="width:${Math.max(3, pct)}%"></i></span>` : ''}</span>
+                    <b>${n.title}</b>
+                    <small>${!c ? '…' : c.fresh ? `${no}부터` : `${no} · ${pct}%`}</small>
+                  </a>`;
+                })}
+              </div>` : ''}
+            ${cs.length ? html`
+              <div class="hm-sub"><span>칼럼</span><a href="#/columns?f=reading">전체 ›</a></div>
+              <div class="hm-cols">
+                ${cs.map(({ c, progress }) => html`
+                  <a href="#/c/${encodeURIComponent(c.id)}" class="hm-col">
+                    <span class="hm-col-t">${c.title}</span>
+                    <span class="hm-col-m">${c.category || '기타'} · ${Math.round(progress * 100)}%</span>
+                    <span class="hm-col-p"><i style="width:${Math.max(3, Math.round(progress * 100))}%"></i></span>
+                  </a>`)}
+              </div>` : ''}`;
+        })()}
       </section>
 
       <div class="flex flex-col lg:flex-row lg:flex-wrap gap-7 lg:gap-8">
@@ -122,9 +141,21 @@ export async function renderHome(view, app) {
       </div>`}
     </div>`);
 
-  const first = { columns: null, unread: null, novels: null, chapters: null, recent: [], cont: null };
+  const first = { columns: null, unread: null, novels: null, chapters: null, recent: [] };
   if (hasCol && cachedColumns()) fillColumns(first, cachedColumns());
   if (hasNov && cachedNovels()) fillNovels(first, cachedNovels());
   draw(first);
-  if (sectorCount) draw(await loadStats(me));
+  if (!sectorCount) return;
+  const st = await loadStats(me);
+  if (!view.isConnected) return;
+  draw(st);
+  // 소설: 이어 읽을 회차를 확인하고(기억해 둔 건 바로), 표지 주소를 받은 뒤 다시 그림
+  const items = contNovels(me);
+  const redraw = () => { if (view.isConnected) draw(st); };
+  signCovers(items.map((x) => x.n.cover_path)).then((got) => got && redraw()).catch(() => {});
+  const todo = items.filter((x) => !x.c);
+  if (todo.length) {
+    await Promise.allSettled(todo.map((x) => resolveCont(x.n)));
+    redraw();
+  }
 }

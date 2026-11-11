@@ -1,151 +1,255 @@
 // 소설 목록 (#/novels) · 회차 목록 (#/n/<id>)
 import { html, mount, onAction, toast } from '../lib/dom.js';
 import { errorMessage } from '../lib/supabase.js';
-import { loadNovels, cachedNovels, novelById, loadChapters, cachedChapters, countNewSince, chapterSortDesc, setChapterSortDesc } from '../lib/novels.js';
-import { chapterNoLabel, chapterRest, chapterTitleLine, chapterTotal, continueTarget, lastOpened, filterNovels, genresOf } from '../lib/novelText.js';
-import { coverUrl, coverHue, signCovers } from '../lib/covers.js';
+import { loadNovels, cachedNovels, novelById, loadChapters, cachedChapters, chapterSortDesc, setChapterSortDesc } from '../lib/novels.js';
+import { chapterNoLabel, chapterRest, chapterTitleLine, chapterTotal, continueTarget, lastOpened, filterNovels, genresOf,
+  parseQuery, matchNovel, novelStatus, sortNovels, hasNew } from '../lib/novelText.js';
+import { coverUrl, signCovers } from '../lib/covers.js';
+import { latestOf, contCached, resolveCont } from '../lib/continue.js';
+import { coverBox } from '../components/cover.js';
+import { attachScrollJump } from '../components/scrollJump.js';
 import { loadReading, novelReading, statusOf } from '../lib/progress.js';
 import { fmtDate } from '../lib/columns.js';
 import { icon } from '../components/icons.js';
 
 export const chapterHref = (nid, key) => `#/n/${encodeURIComponent(nid)}/${encodeURIComponent(key)}`;
 
-function novelStats(n) {
-  const rows = novelReading(n.id);
-  const read = Object.values(rows).filter((r) => statusOf(r) === 'read').length;
-  const opened = lastOpened(rows);
-  const list = cachedChapters(n.id);
-  const cont = list ? continueTarget(list, rows) : null;
-  return { read, opened, cont, started: !!opened };
-}
-
-// 표지: 올린 이미지가 있으면 그것, 없으면 제목으로 색을 정한 기본 표지
-export function coverBox(n, { cls = '' } = {}) {
-  const url = coverUrl(n.cover_path);
-  return html`
-    <span class="nv-cover ${cls}" style="--h:${coverHue(n.title)}">
-      <span class="nv-cover-ph" aria-hidden="true"><b>${n.title}</b>${n.author ? html`<small>${n.author}</small>` : ''}</span>
-      ${url ? html`<img src="${url}" alt="" loading="lazy" decoding="async">` : ''}
-    </span>`;
-}
+// 표지 상자는 홈과 같이 씀
+export { coverBox };
 
 // ---------------------------------------------------------------------
-// #/novels  (바둑판형: 표지 + 제목 · 작가 · 장르 칩 · 태그)
+// #/novels  — 보기 3종(카드 · 작은 카드 · 리스트) · 검색 · 필터 창
 // ---------------------------------------------------------------------
 const FILTER_KEY = 'ui:nvFilter';
+const VIEW_KEY = 'ui:nvView';
+const DEF = { q: '', genres: [], tags: [], status: 'all', sort: 'recent' };
+const STATUS = [['all', '전체'], ['reading', '읽는 중'], ['unread', '안 읽음'], ['read', '다 읽음'], ['new', '새 회차 있음']];
+const SORTS = [['recent', '최근 읽은 순'], ['added', '최근 추가 순'], ['title', '제목 순'], ['count', '회차 많은 순']];
+const VIEWS = [['card', '카드', 'grid'], ['small', '작은 카드', 'grid3'], ['list', '리스트', 'list']];
 const readFilter = () => {
   try {
     const f = JSON.parse(sessionStorage.getItem(FILTER_KEY) || '{}');
-    return { genres: f.genres || (f.genre ? [f.genre] : []), tags: f.tags || [] };
-  } catch { return { genres: [], tags: [] }; }
+    return { ...DEF, ...f, genres: f.genres || (f.genre ? [f.genre] : []), tags: f.tags || [] };
+  } catch { return { ...DEF }; }
 };
 const saveFilter = (f) => { try { sessionStorage.setItem(FILTER_KEY, JSON.stringify(f)); } catch {} };
+const readView = () => { try { return localStorage.getItem(VIEW_KEY) || 'card'; } catch { return 'card'; } };
 
-export function renderNovels(view) {
+export function renderNovels(view, query = {}) {
   let list = cachedNovels();
   let error = null;
-  const fresh = {};   // id → 새 회차 수
   let filter = readFilter();
-  let moreTags = false;
+  if (query.status) { filter = { ...DEF, status: query.status }; saveFilter(filter); history.replaceState(null, '', '#/novels'); }
+  let mode = readView();
+  let sheet = false;
+  let tagQ = '';
 
-  const chip = (on) => `shrink-0 h-9 px-3 rounded-full text-[13px] cursor-pointer whitespace-nowrap ${on ? 'bg-ink text-bg border border-ink font-bold' : 'bg-transparent text-ink border border-line hover-mouse:bg-chip'}`;
-  const tagChip = (on) => `shrink-0 h-8 px-2.5 rounded-full text-[13px] cursor-pointer whitespace-nowrap border ${on ? 'bg-accent-soft text-accent-ink border-accent font-bold' : 'bg-transparent text-muted border-line hover-mouse:text-ink'}`;
+  const openedOf = (n) => lastOpened(novelReading(n.id));
+  const statusOk = (n) => {
+    if (filter.status === 'all') return true;
+    if (filter.status === 'new') return hasNew(n, openedOf(n));
+    return novelStatus(n, novelReading(n.id)) === filter.status;
+  };
+
+  mount(view, html`
+    <header class="h-16 px-5 lg:px-12 lg:pt-6 flex items-center gap-2">
+      <h1 class="m-0 flex-1 text-[22px] font-bold">소설</h1>
+      <div class="nv-views" role="group" aria-label="보기" data-slot="views"></div>
+    </header>
+    <div class="px-5 lg:px-12 max-w-[1180px] flex flex-col gap-2.5">
+      <div class="nv-searchrow">
+        <label class="nv-search">${icon('search', 18)}<span class="sr-only">소설 검색</span>
+          <input type="search" data-input="q" value="${filter.q}" placeholder="제목·작가·장르·#태그" enterkeyhint="search" autocomplete="off"></label>
+        <button type="button" class="nv-filterbtn" data-action="sheet" data-slot="fbtn" aria-haspopup="dialog"></button>
+      </div>
+      <div data-slot="chips"></div>
+    </div>
+    <div class="px-5 lg:px-12 pb-10 pt-3 max-w-[1180px]" data-slot="list"></div>
+    <div data-slot="sheet"></div>`);
+  const slot = (k) => view.querySelector(`[data-slot="${k}"]`);
 
   const draw = () => {
     const all = list || [];
-    const hasMeta = all.some((n) => genresOf(n).length || (n.tags || []).length);
-    // 지금 데이터에 없는 장르·태그 선택은 버림 (관리 탭에서 바뀌었을 때)
+    const tokens = parseQuery(filter.q);
     filter.genres = filter.genres.filter((g) => all.some((n) => genresOf(n).includes(g)));
     filter.tags = filter.tags.filter((t) => all.some((n) => (n.tags || []).includes(t)));
-    const f = filterNovels(all, filter);
-    const TAG_MAX = 10;
-    const tags = moreTags ? f.tags : f.tags.slice(0, TAG_MAX);
-    const any = filter.genres.length || filter.tags.length;
-    mount(view, html`
-    <header class="h-16 px-5 lg:px-12 lg:pt-6 flex items-center">
-      <h1 class="m-0 text-[22px] font-bold">소설</h1>
-    </header>
-    <div class="px-5 lg:px-12 pb-10 max-w-[1180px] flex flex-col gap-3">
-      ${hasMeta ? html`
-        <div class="relative flex gap-1.5 overflow-x-auto [scrollbar-width:none]" data-keep-scroll="genres" role="group" aria-label="장르 (여러 개 고르면 모두 포함)">
-          <button type="button" data-action="genre" data-v="" aria-pressed="${String(!filter.genres.length)}" class="${chip(!filter.genres.length)}">전체 <span class="opacity-70">${all.length}</span></button>
-          ${f.genres.map((g) => { const on = filter.genres.includes(g.name); return html`<button type="button" data-action="genre" data-v="${g.name}" aria-pressed="${String(on)}" class="${chip(on)}" ${!on && !g.count ? 'disabled' : ''}>${g.name} <span class="${on ? 'opacity-70' : 'text-muted'}">${g.count}</span></button>`; })}
-        </div>
-        ${f.tags.length || any ? html`
-          <div class="flex flex-wrap gap-1.5" role="group" aria-label="태그 (여러 개 고르면 모두 포함)">
-            ${tags.map((t) => { const on = filter.tags.includes(t.name); return html`<button type="button" data-action="tag" data-v="${t.name}" aria-pressed="${String(on)}" class="${tagChip(on)}" ${!on && !t.count ? 'disabled' : ''}>#${t.name} <span class="opacity-70">${t.count}</span></button>`; })}
-            ${f.tags.length > TAG_MAX ? html`<button type="button" data-action="more-tags" class="h-8 px-2.5 rounded-full text-[13px] border-0 bg-transparent text-muted cursor-pointer underline">${moreTags ? '접기' : `더보기 ${f.tags.length - TAG_MAX}`}</button>` : ''}
-            ${any ? html`<button type="button" data-action="clear" class="h-8 px-2.5 rounded-full text-[13px] border-0 bg-transparent text-accent-ink cursor-pointer">조건 지우기</button>` : ''}
-          </div>` : ''}` : ''}
+    const base = all.filter((n) => matchNovel(n, tokens) && statusOk(n));
+    const f = filterNovels(base, filter);
+    const items = sortNovels(f.list, filter.sort, openedOf);
+    const nCond = filter.genres.length + filter.tags.length + (filter.status !== 'all' ? 1 : 0) + (filter.sort !== DEF.sort ? 1 : 0);
+
+    mount(slot('views'), html`${VIEWS.map(([k, l, ic]) => html`
+      <button type="button" data-action="view" data-v="${k}" aria-pressed="${String(mode === k)}" aria-label="${l}로 보기" title="${l}">${icon(ic, 18)}</button>`)}`);
+    mount(slot('fbtn'), html`${icon('filter', 18)}<span>필터</span>${nCond ? html`<b>${nCond}</b>` : ''}`);
+    const label = (k, arr) => arr.find((x) => x[0] === k)?.[1];
+    mount(slot('chips'), nCond || filter.q ? html`
+      <div class="nv-active">
+        ${filter.status !== 'all' ? html`<button type="button" data-action="rm" data-k="status">${label(filter.status, STATUS)} ×</button>` : ''}
+        ${filter.genres.map((g) => html`<button type="button" data-action="rm" data-k="genre" data-v="${g}">${g} ×</button>`)}
+        ${filter.tags.map((t) => html`<button type="button" data-action="rm" data-k="tag" data-v="${t}">#${t} ×</button>`)}
+        ${filter.sort !== DEF.sort ? html`<button type="button" data-action="rm" data-k="sort">${label(filter.sort, SORTS)} ×</button>` : ''}
+        <span class="nv-active-n">${items.length}편</span>
+        ${nCond ? html`<button type="button" class="is-clear" data-action="clear">조건 지우기</button>` : ''}
+      </div>` : '');
+
+    mount(slot('list'), html`
       ${!list ? html`<p class="text-sm text-muted py-6">${error || '불러오는 중…'}</p>` : ''}
       ${list && !all.length ? html`<p class="text-sm text-muted py-6">아직 올라온 소설이 없어요.</p>` : ''}
-      ${list && all.length && !f.list.length ? html`<p class="text-sm text-muted py-6">조건에 맞는 소설이 없어요.</p>` : ''}
-      <div class="nv-grid">
-        ${f.list.map((n) => {
-          const st = novelStats(n);
-          const pct = n.chapter_count ? Math.round((st.read / n.chapter_count) * 100) : 0;
-          const ntags = n.tags || [];
-          return html`
-          <article class="nv-card">
-            <a href="#/n/${encodeURIComponent(n.id)}" class="nv-card-link" aria-label="${n.title}">
-              ${coverBox(n)}
-              ${fresh[n.id] ? html`<span class="nv-badge">새 ${fresh[n.id]}</span>` : ''}
-              ${st.started ? html`<span class="nv-card-p" aria-label="${st.read.toLocaleString()} / ${n.chapter_count.toLocaleString()}화 읽음"><i style="width:${Math.max(3, pct)}%"></i></span>` : ''}
-            </a>
-            <a href="#/n/${encodeURIComponent(n.id)}" class="nv-card-t">${n.title}</a>
-            <span class="nv-card-a">${n.author ? html`<span>${n.author}</span> · ` : ''}${n.chapter_count.toLocaleString()}화${st.started ? ` · ${pct}%` : ''}</span>
-            ${genresOf(n).length ? html`<span class="nv-card-g">${genresOf(n).map((g) => html`<button type="button" data-action="genre-add" data-v="${g}" class="nv-gchip ${filter.genres.includes(g) ? 'is-on' : ''}">${g}</button>`)}</span>` : ''}
-            ${ntags.length ? html`<span class="nv-card-tags">
-              ${ntags.slice(0, 3).map((t) => html`<button type="button" data-action="tag" data-v="${t}" class="${filter.tags.includes(t) ? 'is-on' : ''}">#${t}</button>`)}
-              ${ntags.length > 3 ? html`<span>+${ntags.length - 3}</span>` : ''}
-            </span>` : ''}
-            ${st.cont && st.started ? html`
-              <a href="${chapterHref(n.id, st.cont.chapter.key)}" class="nv-card-go">${icon('play', 13)}<span>${chapterNoLabel(st.cont.chapter) || '이어 읽기'}</span></a>` : ''}
-          </article>`;
-        })}
-      </div>
-    </div>`);
+      ${list && all.length && !items.length ? html`<p class="text-sm text-muted py-6">조건에 맞는 소설이 없어요.</p>` : ''}
+      <div class="nv-grid is-${mode}">${items.map((n) => (mode === 'small' ? smallCard(n) : mode === 'list' ? listRow(n) : bigCard(n)))}</div>`);
+
+    mount(slot('sheet'), sheet ? sheetHtml(f, items.length) : '');
   };
 
+  // ---- 카드 3종 ----
+  const progressOf = (n) => {
+    const rows = novelReading(n.id);
+    const read = Object.entries(rows).filter(([k, r]) => k !== 'intro' && statusOf(r) === 'read').length;
+    return { started: Object.keys(rows).length > 0, pct: n.chapter_count ? Math.min(100, Math.round((read / n.chapter_count) * 100)) : 0 };
+  };
+  const contLink = (n, cls) => {
+    const c = contCached(n);
+    if (!c || c.done) return '';
+    const no = chapterNoLabel(c.chapter) || chapterRest(c.chapter);
+    return html`<a href="${chapterHref(n.id, c.chapter.key)}" class="${cls}" aria-label="${n.title} ${no} 이어 읽기">${icon('play', 13)}<span>${no}</span></a>`;
+  };
+  const newBadge = (n) => {
+    const c = contCached(n);
+    return c?.newCount ? html`<span class="nv-badge">새 ${c.newCount}</span>` : '';
+  };
+  const coverLink = (n, cls = '') => {
+    const p = progressOf(n);
+    return html`
+      <a href="#/n/${encodeURIComponent(n.id)}" class="nv-card-link" aria-label="${n.title}">
+        ${coverBox(n, { cls })}
+        ${newBadge(n)}
+        ${p.started ? html`<span class="nv-card-p"><i style="width:${Math.max(3, p.pct)}%"></i></span>` : ''}
+      </a>`;
+  };
+  const genreChips = (n) => (genresOf(n).length ? html`<span class="nv-card-g">${genresOf(n).map((g) => html`<button type="button" data-action="genre-add" data-v="${g}" class="nv-gchip ${filter.genres.includes(g) ? 'is-on' : ''}">${g}</button>`)}</span>` : '');
+  const bigCard = (n) => {
+    const p = progressOf(n);
+    const ntags = n.tags || [];
+    return html`
+      <article class="nv-card">
+        ${coverLink(n)}
+        <a href="#/n/${encodeURIComponent(n.id)}" class="nv-card-t">${n.title}</a>
+        <span class="nv-card-a">${n.author ? html`<span>${n.author}</span> · ` : ''}${n.chapter_count.toLocaleString()}화${p.started ? ` · ${p.pct}%` : ''}</span>
+        ${genreChips(n)}
+        ${ntags.length ? html`<span class="nv-card-tags">
+          ${ntags.slice(0, 3).map((t) => html`<button type="button" data-action="tag" data-v="${t}" class="${filter.tags.includes(t) ? 'is-on' : ''}">#${t}</button>`)}
+          ${ntags.length > 3 ? html`<span>+${ntags.length - 3}</span>` : ''}</span>` : ''}
+        ${contLink(n, 'nv-card-go')}
+      </article>`;
+  };
+  const smallCard = (n) => html`
+    <article class="nv-card is-small">
+      ${coverLink(n, 'is-sm')}
+      <a href="#/n/${encodeURIComponent(n.id)}" class="nv-card-t">${n.title}</a>
+    </article>`;
+  const listRow = (n) => {
+    const p = progressOf(n);
+    const g = genresOf(n);
+    return html`
+      <article class="nv-lrow">
+        ${coverLink(n, 'is-sm')}
+        <a href="#/n/${encodeURIComponent(n.id)}" class="nv-lrow-main">
+          <b>${n.title}</b>
+          <span>${[n.author, g.join(' · ')].filter(Boolean).join(' · ') || ' '}</span>
+          <small>${n.chapter_count.toLocaleString()}화${p.started ? ` · ${p.pct}%` : ''}${(n.tags || []).length ? ` · ${n.tags.slice(0, 3).map((t) => `#${t}`).join(' ')}` : ''}</small>
+        </a>
+        ${contLink(n, 'nv-lrow-go')}
+      </article>`;
+  };
+
+  // ---- 필터 창 ----
+  const sheetHtml = (f, count) => {
+    const chip = (on) => `nv-fchip ${on ? 'is-on' : ''}`;
+    const tq = fold(tagQ);
+    const tags = f.tags.filter((t) => !tq || fold(t.name).includes(tq));
+    return html`
+      <div class="nv-sheet-back" data-action="sheet-close"></div>
+      <section class="nv-sheet" role="dialog" aria-label="필터">
+        <header><strong>필터</strong><button type="button" data-action="reset">초기화</button></header>
+        <div class="nv-sheet-body">
+          <h3>읽기 상태</h3>
+          <div class="nv-fchips">${STATUS.map(([k, l]) => html`<button type="button" class="${chip(filter.status === k)}" data-action="f-status" data-v="${k}" aria-pressed="${String(filter.status === k)}">${l}</button>`)}</div>
+          <h3>정렬</h3>
+          <div class="nv-fchips">${SORTS.map(([k, l]) => html`<button type="button" class="${chip(filter.sort === k)}" data-action="f-sort" data-v="${k}" aria-pressed="${String(filter.sort === k)}">${l}</button>`)}</div>
+          <h3>장르 <small>여러 개 고르면 모두 포함</small></h3>
+          <div class="nv-fchips">${f.genres.length ? f.genres.map((g) => { const on = filter.genres.includes(g.name); return html`<button type="button" class="${chip(on)}" data-action="genre" data-v="${g.name}" aria-pressed="${String(on)}" ${!on && !g.count ? 'disabled' : ''}>${g.name} <span>${g.count}</span></button>`; }) : html`<span class="nv-fnone">장르가 아직 없어요</span>`}</div>
+          <h3>태그 <small>여러 개 고르면 모두 포함</small></h3>
+          ${f.tags.length > 12 ? html`<input class="nv-ftagq" data-input="tagq" value="${tagQ}" placeholder="태그 찾기" autocomplete="off">` : ''}
+          <div class="nv-fchips" data-slot="ftags">${tagChips(tags)}</div>
+        </div>
+        <footer><button type="button" class="is-main" data-action="sheet-close">${count.toLocaleString()}편 보기</button></footer>
+      </section>`;
+  };
+  const tagChips = (tags) => (tags.length
+    ? tags.map((t) => { const on = filter.tags.includes(t.name); return html`<button type="button" class="nv-fchip ${on ? 'is-on' : ''}" data-action="tag" data-v="${t.name}" aria-pressed="${String(on)}" ${!on && !t.count ? 'disabled' : ''}>#${t.name} <span>${t.count}</span></button>`; })
+    : html`<span class="nv-fnone">${tagQ ? '맞는 태그가 없어요' : '태그가 아직 없어요'}</span>`);
+  const fold = (s) => String(s || '').toLowerCase().replace(/\s+/g, '');
+
+  const set = (patch) => { filter = { ...filter, ...patch }; saveFilter(filter); draw(); };
   const toggle = (arr, v) => (arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
+  const keepSheetScroll = (fn) => {
+    const b = view.querySelector('.nv-sheet-body');
+    const y = b ? b.scrollTop : 0;
+    fn();
+    const nb = view.querySelector('.nv-sheet-body');
+    if (nb) nb.scrollTop = y;
+  };
   onAction(view, {
-    genre(b) {
-      const g = b.dataset.v;
-      filter.genres = g ? toggle(filter.genres, g) : [];
-      saveFilter(filter); draw();
+    view(b) { mode = b.dataset.v; try { localStorage.setItem(VIEW_KEY, mode); } catch {} draw(); },
+    sheet() { sheet = true; tagQ = ''; draw(); view.querySelector('.nv-sheet header button')?.focus({ preventScroll: true }); },
+    'sheet-close'() { sheet = false; draw(); },
+    reset() { keepSheetScroll(() => set({ genres: [], tags: [], status: 'all', sort: DEF.sort })); },
+    'f-status'(b) { keepSheetScroll(() => set({ status: b.dataset.v })); },
+    'f-sort'(b) { keepSheetScroll(() => set({ sort: b.dataset.v })); },
+    genre(b) { keepSheetScroll(() => set({ genres: toggle(filter.genres, b.dataset.v) })); },
+    tag(b) { keepSheetScroll(() => set({ tags: toggle(filter.tags, b.dataset.v) })); },
+    'genre-add'(b) { if (!filter.genres.includes(b.dataset.v)) set({ genres: [...filter.genres, b.dataset.v] }); window.scrollTo({ top: 0 }); },
+    rm(b) {
+      const k = b.dataset.k;
+      if (k === 'status') set({ status: 'all' });
+      else if (k === 'sort') set({ sort: DEF.sort });
+      else if (k === 'genre') set({ genres: filter.genres.filter((x) => x !== b.dataset.v) });
+      else set({ tags: filter.tags.filter((x) => x !== b.dataset.v) });
     },
-    'genre-add'(b) {
-      if (!filter.genres.includes(b.dataset.v)) filter.genres = [...filter.genres, b.dataset.v];
-      saveFilter(filter); draw(); window.scrollTo({ top: 0 });
-    },
-    tag(b) {
-      filter.tags = toggle(filter.tags, b.dataset.v);
-      saveFilter(filter); draw();
-    },
-    'more-tags'() { moreTags = !moreTags; draw(); },
-    clear() { filter = { genres: [], tags: [] }; saveFilter(filter); draw(); },
+    clear() { set({ genres: [], tags: [], status: 'all', sort: DEF.sort }); },
   });
+  let qt = null;
+  view.addEventListener('input', (e) => {
+    if (e.target.dataset.input === 'q') {
+      clearTimeout(qt);
+      qt = setTimeout(() => { filter = { ...filter, q: e.target.value }; saveFilter(filter); draw(); }, 150);
+    } else if (e.target.dataset.input === 'tagq') {
+      tagQ = e.target.value;
+      // 태그 목록만 다시 (입력칸 포커스 유지)
+      const all = list || [];
+      const f = filterNovels(all.filter((n) => matchNovel(n, parseQuery(filter.q)) && statusOk(n)), filter);
+      const tq = fold(tagQ);
+      mount(view.querySelector('[data-slot="ftags"]'), html`${tagChips(f.tags.filter((t) => !tq || fold(t.name).includes(tq)))}`);
+    }
+  });
+  const onKey = (e) => { if (e.key === 'Escape' && sheet) { sheet = false; draw(); } };
+  document.addEventListener('keydown', onKey);
+  const jumpers = attachScrollJump(view);
 
   const refresh = async () => {
     try {
       const [ns] = await Promise.all([loadNovels(), loadReading().catch(() => null)]);
       list = ns;
-      draw();
-      // 표지 주소 (받은 게 있으면 다시 그림)
-      signCovers(ns.map((n) => n.cover_path)).then((got) => { if (got && view.isConnected) draw(); }).catch(() => {});
-      // 새 회차: 마지막으로 연 뒤 회차가 추가된 소설만 개수 확인
-      await Promise.all(ns.map(async (n) => {
-        const since = lastOpened(novelReading(n.id));
-        if (since && n.last_added_at && n.last_added_at > since) {
-          const c = await countNewSince(n.id, since);
-          if (c) fresh[n.id] = c;
-        }
-      }));
       if (view.isConnected) draw();
+      signCovers(ns.map((n) => n.cover_path)).then((got) => { if (got && view.isConnected) draw(); }).catch(() => {});
+      // 읽던 소설의 이어 읽을 회차 · 새 회차 수 (기억해 둔 건 바로)
+      const todo = ns.filter((n) => latestOf(n.id) && !contCached(n));
+      if (todo.length) { await Promise.allSettled(todo.map((n) => resolveCont(n))); if (view.isConnected) draw(); }
     } catch (err) { error = errorMessage(err); if (!list) draw(); else toast(error); }
   };
   draw();
   refresh();
+  return () => { clearTimeout(qt); document.removeEventListener('keydown', onKey); jumpers.destroy(); };
 }
 
 // ---------------------------------------------------------------------
@@ -194,7 +298,7 @@ export function renderNovel(view, id) {
       <div class="px-5 lg:px-12 pb-10 max-w-[760px] flex flex-col gap-4">
         ${novel ? html`
           <div class="nv-head">
-            ${coverBox(novel, { cls: 'is-lg' })}
+            ${novel.cover_path ? html`<button type="button" class="nv-cover-btn" data-action="cover" aria-label="표지 크게 보기">${coverBox(novel, { cls: 'is-lg' })}</button>` : coverBox(novel, { cls: 'is-lg' })}
             <div class="nv-head-info">
               ${novel.author ? html`<span class="text-[14px]">${novel.author}</span>` : ''}
               ${genresOf(novel).length ? html`<span class="nv-card-g">${genresOf(novel).map((g) => html`<a class="nv-gchip" href="#/novels" data-genre="${g}">${g}</a>`)}</span>` : ''}
@@ -227,11 +331,17 @@ export function renderNovel(view, id) {
   onAction(view, {
     sort() { desc = !desc; setChapterSortDesc(id, desc); draw(); },
     jump,
+    cover() { if (novel) openCover(novel); },
   });
+  const jumpers = attachScrollJump(view);
+  const syncJump = () => {
+    const cont = chapters ? continueTarget(chapters, novelReading(id)) : null;
+    jumpers.setExtra(cont && !cont.fresh ? { label: '읽던 회차', run: jump } : null);
+  };
   // 장르 칩 → 그 장르로 거른 소설 목록
   view.addEventListener('click', (e) => {
     const g = e.target.closest?.('[data-genre]');
-    if (g) saveFilter({ genres: [g.dataset.genre], tags: [] });
+    if (g) saveFilter({ ...DEF, genres: [g.dataset.genre] });
   });
 
   draw();
@@ -245,7 +355,44 @@ export function renderNovel(view, id) {
       since = since || null;
       if (!view.isConnected) return;
       draw();
+      syncJump();
       if (!scrolled) { scrolled = true; requestAnimationFrame(jump); }
     } catch (err) { error = errorMessage(err); if (!chapters) draw(); else toast(error); }
   })();
+  return () => { jumpers.destroy(); closeCover(); };
+}
+
+// ---------------------------------------------------------------------
+// 표지 크게 보기: 화면에 맞춰 띄움 (확대·축소 없음). 크게 보기용 표지가 있으면 그것, 없으면 목록용 표지
+// ---------------------------------------------------------------------
+let coverEl = null;
+function closeCover() {
+  if (!coverEl) return;
+  coverEl.remove();
+  coverEl = null;
+  document.removeEventListener('keydown', coverKey, true);
+}
+const coverKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); closeCover(); } };
+async function openCover(n) {
+  closeCover();
+  const big = n.cover_large_path;
+  const small = coverUrl(n.cover_path);
+  coverEl = document.createElement('div');
+  coverEl.className = 'cv-modal';
+  coverEl.setAttribute('role', 'dialog');
+  coverEl.setAttribute('aria-label', `${n.title} 표지`);
+  mount(coverEl, html`
+    <button type="button" class="cv-x" aria-label="닫기">${icon('close', 22)}</button>
+    <img alt="${n.title} 표지" src="${coverUrl(big) || small || ''}">`);
+  coverEl.addEventListener('click', closeCover);
+  document.body.append(coverEl);
+  document.addEventListener('keydown', coverKey, true);
+  coverEl.querySelector('.cv-x').focus({ preventScroll: true });
+  if (big && !coverUrl(big)) {
+    try {
+      await signCovers([big]);
+      const img = coverEl?.querySelector('img');
+      if (img && coverUrl(big)) img.src = coverUrl(big);
+    } catch {}
+  }
 }
