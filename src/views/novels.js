@@ -11,6 +11,10 @@ import { attachScrollJump } from '../components/scrollJump.js';
 import { loadReading, novelReading, statusOf } from '../lib/progress.js';
 import { fmtDate } from '../lib/columns.js';
 import { icon } from '../components/icons.js';
+import { isNovelSaved, savedNovelsNow, savedKeysOf, novelDiff, refreshIndex, onSaved } from '../lib/offline/index.js';
+import { openNovelDownload, quickNext } from '../components/dlFlow.js';
+import { cachedQuota, loadQuota } from '../lib/offline/quota.js';
+import { fmtBytes, roomOf } from '../lib/offline/plan.js';
 
 export const chapterHref = (nid, key) => `#/n/${encodeURIComponent(nid)}/${encodeURIComponent(key)}`;
 
@@ -22,7 +26,7 @@ export { coverBox };
 // ---------------------------------------------------------------------
 const FILTER_KEY = 'ui:nvFilter';
 const VIEW_KEY = 'ui:nvView';
-const DEF = { q: '', genres: [], tags: [], status: 'all', sort: 'recent' };
+const DEF = { q: '', genres: [], tags: [], status: 'all', sort: 'recent', saved: false };
 const STATUS = [['all', '전체'], ['reading', '읽는 중'], ['unread', '안 읽음'], ['read', '다 읽음'], ['new', '새 회차 있음']];
 const SORTS = [['recent', '최근 읽은 순'], ['added', '최근 추가 순'], ['title', '제목 순'], ['count', '회차 많은 순']];
 const VIEWS = [['card', '카드', 'grid'], ['small', '작은 카드', 'grid3'], ['list', '리스트', 'list']];
@@ -43,19 +47,19 @@ export function renderNovels(view, query = {}) {
   let mode = readView();
   let sheet = false;
   let tagQ = '';
+  let pick = null;        // 여러 편 받기: 고른 소설 id Set (null = 평소)
+  let menuFor = null;     // 카드 메뉴가 열린 소설
 
   const openedOf = (n) => lastOpened(novelReading(n.id));
   const statusOk = (n) => {
+    if (filter.saved && !isNovelSaved(n.id)) return false;
     if (filter.status === 'all') return true;
     if (filter.status === 'new') return hasNew(n, openedOf(n));
     return novelStatus(n, novelReading(n.id)) === filter.status;
   };
 
   mount(view, html`
-    <header class="h-16 px-5 lg:px-12 lg:pt-6 flex items-center gap-2">
-      <h1 class="m-0 flex-1 text-[22px] font-bold">소설</h1>
-      <div class="nv-views" role="group" aria-label="보기" data-slot="views"></div>
-    </header>
+    <header class="h-16 px-5 lg:px-12 lg:pt-6 flex items-center gap-2" data-slot="head"></header>
     <div class="px-5 lg:px-12 max-w-[1180px] flex flex-col gap-2.5">
       <div class="nv-searchrow">
         <label class="nv-search">${icon('search', 18)}<span class="sr-only">소설 검색</span>
@@ -65,9 +69,12 @@ export function renderNovels(view, query = {}) {
       <div data-slot="chips"></div>
     </div>
     <div class="px-5 lg:px-12 pb-10 pt-3 max-w-[1180px]" data-slot="list"></div>
-    <div data-slot="sheet"></div>`);
+    <div data-slot="sheet"></div>
+    <div data-slot="pickbar"></div>
+    <div data-slot="menu"></div>`);
   const slot = (k) => view.querySelector(`[data-slot="${k}"]`);
 
+  let visible = [];
   const draw = () => {
     const all = list || [];
     const tokens = parseQuery(filter.q);
@@ -76,14 +83,27 @@ export function renderNovels(view, query = {}) {
     const base = all.filter((n) => matchNovel(n, tokens) && statusOk(n));
     const f = filterNovels(base, filter);
     const items = sortNovels(f.list, filter.sort, openedOf);
-    const nCond = filter.genres.length + filter.tags.length + (filter.status !== 'all' ? 1 : 0) + (filter.sort !== DEF.sort ? 1 : 0);
+    const nCond = filter.genres.length + filter.tags.length + (filter.status !== 'all' ? 1 : 0) + (filter.sort !== DEF.sort ? 1 : 0) + (filter.saved ? 1 : 0);
 
-    mount(slot('views'), html`${VIEWS.map(([k, l, ic]) => html`
-      <button type="button" data-action="view" data-v="${k}" aria-pressed="${String(mode === k)}" aria-label="${l}로 보기" title="${l}">${icon(ic, 18)}</button>`)}`);
+    mount(slot('head'), pick ? html`
+      <h1 class="m-0 flex-1 text-[20px] font-bold">받을 소설 고르기</h1>
+      <button type="button" class="nv-hbtn is-text" data-action="pick-all">모두 선택</button>
+      <button type="button" class="nv-hbtn" data-action="pick-cancel">취소</button>` : html`
+      <h1 class="m-0 flex-1 text-[22px] font-bold">소설</h1>
+      ${navigator.onLine ? html`<button type="button" class="nv-hbtn" data-action="pick-start" aria-label="여러 편 받기" title="여러 편 받기">${icon('download', 15)}<span>여러 편 받기</span></button>` : ''}
+      <div class="nv-views" role="group" aria-label="보기">${VIEWS.map(([k, l, ic]) => html`
+        <button type="button" data-action="view" data-v="${k}" aria-pressed="${String(mode === k)}" aria-label="${l}로 보기" title="${l}">${icon(ic, 18)}</button>`)}</div>`);
+    const q = cachedQuota();
+    mount(slot('pickbar'), pick ? html`
+      <div class="nv-pickbar">
+        <span><b>${pick.size}편</b> 선택${q && !q.unlimited ? html`<br><small>남은 한도 ${fmtBytes(roomOf(q))}</small>` : ''}</span>
+        <button type="button" class="dl-main" data-action="pick-go" ${pick.size ? '' : 'disabled'}>회차 고르기</button>
+      </div>` : '');
     mount(slot('fbtn'), html`${icon('filter', 18)}<span>필터</span>${nCond ? html`<b>${nCond}</b>` : ''}`);
     const label = (k, arr) => arr.find((x) => x[0] === k)?.[1];
     mount(slot('chips'), nCond || filter.q ? html`
       <div class="nv-active">
+        ${filter.saved ? html`<button type="button" data-action="rm" data-k="saved">다운로드됨 ×</button>` : ''}
         ${filter.status !== 'all' ? html`<button type="button" data-action="rm" data-k="status">${label(filter.status, STATUS)} ×</button>` : ''}
         ${filter.genres.map((g) => html`<button type="button" data-action="rm" data-k="genre" data-v="${g}">${g} ×</button>`)}
         ${filter.tags.map((t) => html`<button type="button" data-action="rm" data-k="tag" data-v="${t}">#${t} ×</button>`)}
@@ -96,9 +116,11 @@ export function renderNovels(view, query = {}) {
       ${!list ? html`<p class="text-sm text-muted py-6">${error || '불러오는 중…'}</p>` : ''}
       ${list && !all.length ? html`<p class="text-sm text-muted py-6">아직 올라온 소설이 없어요.</p>` : ''}
       ${list && all.length && !items.length ? html`<p class="text-sm text-muted py-6">조건에 맞는 소설이 없어요.</p>` : ''}
-      <div class="nv-grid is-${mode}">${items.map((n) => (mode === 'small' ? smallCard(n) : mode === 'list' ? listRow(n) : bigCard(n)))}</div>`);
+      <div class="nv-grid is-${mode} ${pick ? 'is-pick' : ''}">${items.map((n) => (mode === 'small' ? smallCard(n) : mode === 'list' ? listRow(n) : bigCard(n)))}</div>`);
 
     mount(slot('sheet'), sheet ? sheetHtml(f, items.length) : '');
+    mount(slot('menu'), menuFor ? menuHtml(menuFor) : '');
+    visible = items;
   };
 
   // ---- 카드 3종 ----
@@ -119,12 +141,33 @@ export function renderNovels(view, query = {}) {
   };
   const coverLink = (n, cls = '') => {
     const p = progressOf(n);
+    const saved = isNovelSaved(n.id);
     return html`
-      <a href="#/n/${encodeURIComponent(n.id)}" class="nv-card-link" aria-label="${n.title}">
-        ${coverBox(n, { cls })}
-        ${newBadge(n)}
-        ${p.started ? html`<span class="nv-card-p"><i style="width:${Math.max(3, p.pct)}%"></i></span>` : ''}
-      </a>`;
+      <span class="nv-card-wrap ${!navigator.onLine && !saved ? 'is-off' : ''}">
+        <a href="#/n/${encodeURIComponent(n.id)}" class="nv-card-link" aria-label="${n.title}${!navigator.onLine && !saved ? ' (연결되면 열 수 있어요)' : ''}" data-card="${n.id}">
+          ${coverBox(n, { cls })}
+          ${newBadge(n)}
+          ${saved ? html`<span class="nv-dl" title="받아 둠" aria-label="받아 둠">${icon('download', 12, 2.6)}</span>` : ''}
+          ${p.started ? html`<span class="nv-card-p"><i style="width:${Math.max(3, p.pct)}%"></i></span>` : ''}
+        </a>
+        ${pick ? html`<input type="checkbox" class="nv-pick" data-action="pick-one" data-id="${n.id}" ${pick.has(n.id) ? 'checked' : ''} aria-label="${n.title} 고르기">`
+          : navigator.onLine ? html`<button type="button" class="nv-more" data-action="menu" data-id="${n.id}" aria-label="${n.title} 메뉴">${icon('more', 18)}</button>` : ''}
+      </span>`;
+  };
+  // 카드 메뉴 (휴대폰: 길게 누르기 · PC: ⋯ 버튼)
+  const menuHtml = (id) => {
+    const n = (list || []).find((x) => x.id === id);
+    if (!n) return '';
+    const s = savedNovelsNow().get(id);
+    return html`
+      <div class="nv-sheet-back" data-action="menu-close"></div>
+      <section class="nv-sheet nv-menu" role="dialog" aria-label="${n.title} 메뉴">
+        <div class="nv-menu-h">${coverBox(n, { cls: 'is-sm' })}<span><b>${n.title}</b><small>${n.chapter_count.toLocaleString()}화${s ? ` · 받은 ${s.saved.size}화` : ''}</small></span></div>
+        <button type="button" class="nv-mi" data-action="m-pick" data-id="${id}">${icon('download', 18)}<span>회차 골라 받기<small>회차 선택 창이 열려요</small></span></button>
+        <button type="button" class="nv-mi" data-action="m-next" data-id="${id}">${icon('next', 18)}<span>다음 50화 바로 받기<small>읽던 회차부터 · 받은 회차는 빼고</small></span></button>
+        <a class="nv-mi" href="#/n/${encodeURIComponent(id)}">${icon('novels', 18)}<span>소설 보기</span></a>
+        <button type="button" class="nv-mi" data-action="m-multi" data-id="${id}">${icon('check', 18)}<span>여러 편 고르기<small>이 소설부터 선택해서 시작</small></span></button>
+      </section>`;
   };
   const genreChips = (n) => (genresOf(n).length ? html`<span class="nv-card-g">${genresOf(n).map((g) => html`<button type="button" data-action="genre-add" data-v="${g}" class="nv-gchip ${filter.genres.includes(g) ? 'is-on' : ''}">${g}</button>`)}</span>` : '');
   const bigCard = (n) => {
@@ -172,6 +215,8 @@ export function renderNovels(view, query = {}) {
       <section class="nv-sheet" role="dialog" aria-label="필터">
         <header><strong>필터</strong><button type="button" data-action="reset">초기화</button></header>
         <div class="nv-sheet-body">
+          <h3>보관</h3>
+          <div class="nv-fchips"><button type="button" class="${chip(filter.saved)}" data-action="f-saved" aria-pressed="${String(filter.saved)}">다운로드됨 <span>${(list || []).filter((n) => isNovelSaved(n.id)).length}</span></button></div>
           <h3>읽기 상태</h3>
           <div class="nv-fchips">${STATUS.map(([k, l]) => html`<button type="button" class="${chip(filter.status === k)}" data-action="f-status" data-v="${k}" aria-pressed="${String(filter.status === k)}">${l}</button>`)}</div>
           <h3>정렬</h3>
@@ -203,7 +248,8 @@ export function renderNovels(view, query = {}) {
     view(b) { mode = b.dataset.v; try { localStorage.setItem(VIEW_KEY, mode); } catch {} draw(); },
     sheet() { sheet = true; tagQ = ''; draw(); view.querySelector('.nv-sheet header button')?.focus({ preventScroll: true }); },
     'sheet-close'() { sheet = false; draw(); },
-    reset() { keepSheetScroll(() => set({ genres: [], tags: [], status: 'all', sort: DEF.sort })); },
+    reset() { keepSheetScroll(() => set({ genres: [], tags: [], status: 'all', sort: DEF.sort, saved: false })); },
+    'f-saved'() { keepSheetScroll(() => set({ saved: !filter.saved })); },
     'f-status'(b) { keepSheetScroll(() => set({ status: b.dataset.v })); },
     'f-sort'(b) { keepSheetScroll(() => set({ sort: b.dataset.v })); },
     genre(b) { keepSheetScroll(() => set({ genres: toggle(filter.genres, b.dataset.v) })); },
@@ -211,13 +257,68 @@ export function renderNovels(view, query = {}) {
     'genre-add'(b) { if (!filter.genres.includes(b.dataset.v)) set({ genres: [...filter.genres, b.dataset.v] }); window.scrollTo({ top: 0 }); },
     rm(b) {
       const k = b.dataset.k;
-      if (k === 'status') set({ status: 'all' });
+      if (k === 'saved') set({ saved: false });
+      else if (k === 'status') set({ status: 'all' });
       else if (k === 'sort') set({ sort: DEF.sort });
       else if (k === 'genre') set({ genres: filter.genres.filter((x) => x !== b.dataset.v) });
       else set({ tags: filter.tags.filter((x) => x !== b.dataset.v) });
     },
-    clear() { set({ genres: [], tags: [], status: 'all', sort: DEF.sort }); },
+    clear() { set({ genres: [], tags: [], status: 'all', sort: DEF.sort, saved: false }); },
+    'pick-start'() { pick = new Set(); loadQuota().then(() => { if (pick && view.isConnected) draw(); }).catch(() => {}); draw(); },
+    'pick-cancel'() { pick = null; draw(); },
+    'pick-all'() { pick = new Set(visible.map((n) => n.id)); draw(); },
+    async 'pick-go'() {
+      const ns = (list || []).filter((n) => pick.has(n.id));
+      const r = await openNovelDownload(ns);
+      if (r) { pick = null; }
+      if (view.isConnected) draw();
+    },
+    menu(b) { menuFor = b.dataset.id; draw(); },
+    'menu-close'() { menuFor = null; draw(); },
+    async 'm-pick'(b) { menuFor = null; draw(); await openNovelDownload([novelById(b.dataset.id)]); if (view.isConnected) draw(); },
+    async 'm-next'(b) { menuFor = null; draw(); await quickNext(novelById(b.dataset.id), 50); if (view.isConnected) draw(); },
+    'm-multi'(b) { menuFor = null; pick = new Set([b.dataset.id]); loadQuota().then(() => { if (pick && view.isConnected) draw(); }).catch(() => {}); draw(); },
   });
+  view.addEventListener('change', (e) => {
+    if (e.target.dataset.action !== 'pick-one' || !pick) return;
+    if (e.target.checked) pick.add(e.target.dataset.id); else pick.delete(e.target.dataset.id);
+    draw();
+  });
+  // 고르는 중에는 카드를 눌러도 들어가지 않고 고르기
+  view.addEventListener('click', (e) => {
+    if (!pick) return;
+    const a = e.target.closest('.nv-card-link, .nv-card-t, .nv-lrow-main');
+    if (!a) return;
+    e.preventDefault();
+    const id = a.dataset.card || a.closest('.nv-card, .nv-lrow')?.querySelector('[data-card]')?.dataset.card;
+    if (!id) return;
+    if (pick.has(id)) pick.delete(id); else pick.add(id);
+    draw();
+  }, true);
+  // 길게 누르기 → 카드 메뉴
+  let lp = null; let lpFired = false;
+  view.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' || pick || !navigator.onLine) return;
+    const a = e.target.closest('[data-card]');
+    if (!a) return;
+    lpFired = false;
+    lp = setTimeout(() => { lpFired = true; menuFor = a.dataset.card; draw(); try { navigator.vibrate?.(10); } catch {} }, 520);
+  });
+  const lpCancel = () => clearTimeout(lp);
+  view.addEventListener('pointerup', lpCancel);
+  view.addEventListener('pointercancel', lpCancel);
+  view.addEventListener('pointermove', (e) => { if (Math.abs(e.movementX) + Math.abs(e.movementY) > 6) lpCancel(); });
+  view.addEventListener('click', (e) => { if (lpFired && e.target.closest('[data-card]')) { e.preventDefault(); lpFired = false; } }, true);
+  // 안드로이드는 길게 누르면 링크 메뉴가 먼저 뜸 → 터치일 때는 그 대신 카드 메뉴
+  let lastPointer = 'mouse';
+  view.addEventListener('pointerdown', (e) => { lastPointer = e.pointerType; }, true);
+  view.addEventListener('contextmenu', (e) => {
+    const a = e.target.closest('[data-card]');
+    if (!a || lastPointer === 'mouse' || pick || !navigator.onLine) return;
+    e.preventDefault();
+    if (!lpFired) { clearTimeout(lp); lpFired = true; menuFor = a.dataset.card; draw(); }
+  });
+
   let qt = null;
   view.addEventListener('input', (e) => {
     if (e.target.dataset.input === 'q') {
@@ -232,7 +333,10 @@ export function renderNovels(view, query = {}) {
       mount(view.querySelector('[data-slot="ftags"]'), html`${tagChips(f.tags.filter((t) => !tq || fold(t.name).includes(tq)))}`);
     }
   });
-  const onKey = (e) => { if (e.key === 'Escape' && sheet) { sheet = false; draw(); } };
+  const onKey = (e) => {
+    if (e.key !== 'Escape') return;
+    if (menuFor) { menuFor = null; draw(); } else if (sheet) { sheet = false; draw(); } else if (pick) { pick = null; draw(); }
+  };
   document.addEventListener('keydown', onKey);
   const jumpers = attachScrollJump(view);
 
@@ -247,9 +351,11 @@ export function renderNovels(view, query = {}) {
       if (todo.length) { await Promise.allSettled(todo.map((n) => resolveCont(n))); if (view.isConnected) draw(); }
     } catch (err) { error = errorMessage(err); if (!list) draw(); else toast(error); }
   };
+  const offSaved = onSaved(() => { if (view.isConnected) draw(); });
+  refreshIndex().catch(() => {});
   draw();
   refresh();
-  return () => { clearTimeout(qt); document.removeEventListener('keydown', onKey); jumpers.destroy(); };
+  return () => { clearTimeout(qt); clearTimeout(lp); offSaved(); document.removeEventListener('keydown', onKey); jumpers.destroy(); };
 }
 
 // ---------------------------------------------------------------------
@@ -258,17 +364,25 @@ export function renderNovels(view, query = {}) {
 export function chapterRows(nid, chapters, { current = null, since = null, desc = false } = {}) {
   const rows = novelReading(nid);
   const list = desc ? [...chapters].reverse() : chapters;
+  // 받아 둔 회차 표시: 받음 · 바뀜 / 오프라인이면 안 받은 회차는 흐리게
+  const saved = savedKeysOf(nid);
+  const d = saved.size ? novelDiff(nid, chapters) : null;
+  const changed = new Set(d?.changed || []);
+  const fresh = new Set(d?.fresh || []);
+  const off = !navigator.onLine;
   return list.map((c) => {
     const r = rows[c.key];
     const s = statusOf(r);
     const on = c.key === current;
-    const isNew = since && c.added_at > since && s === 'unread';
+    const isNew = (since && c.added_at > since && s === 'unread') || fresh.has(c.key);
+    const have = saved.has(c.key);
     return html`
       <a href="${chapterHref(nid, c.key)}" data-key="${c.key}" ${on ? html`aria-current="true"` : ''}
-         class="nv-row ${on ? 'is-current' : ''} ${s === 'read' ? 'is-read' : ''}">
+         class="nv-row ${on ? 'is-current' : ''} ${s === 'read' ? 'is-read' : ''} ${off && !have ? 'is-off' : ''}">
         <span class="nv-row-n">${chapterNoLabel(c)}</span>
         <span class="nv-row-t">${chapterRest(c)}</span>
         ${isNew ? html`<span class="nv-new">새</span>` : ''}
+        ${changed.has(c.key) ? html`<span class="dl-badge is-acc">바뀜</span>` : have ? html`<span class="nv-row-dl" aria-label="받아 둠">${icon('download', 14, 2.4)}</span>` : ''}
         ${s === 'reading' ? html`<span class="nv-row-p" aria-label="${Math.round((r.progress || 0) * 100)}% 읽음"><i style="width:${Math.max(6, Math.round((r.progress || 0) * 100))}%"></i></span>` : ''}
         ${s === 'read' ? html`<span class="nv-row-c" aria-label="읽음">${icon('check', 15, 2.4)}</span>` : ''}
       </a>`;
@@ -315,6 +429,7 @@ export function renderNovel(view, id) {
                 <span class="font-bold truncate">${chapterTitleLine(cont.chapter)}</span>
               </span>
             </a>` : ''}
+          ${keepCard()}
           <div class="flex items-center gap-2 border-b border-line pb-2 text-[13px]">
             <span class="flex-1 font-bold">회차</span>
             ${cont && !cont.fresh ? html`<button type="button" data-action="jump" class="h-8 px-2.5 rounded-lg border-0 bg-transparent text-muted cursor-pointer hover-mouse:text-ink">읽던 회차로</button>` : ''}
@@ -322,6 +437,35 @@ export function renderNovel(view, id) {
           </div>
           <nav class="nv-list" aria-label="회차 목록">${chapterRows(id, chapters, { current: cont && !cont.fresh ? cont.chapter.key : null, since, desc })}</nav>`}
       </div>`);
+  };
+
+  // 오프라인 보관 카드: 받은 회차 · 크기 · 새 회차 · 바뀐 회차 · [회차 받기] · 관리 ›
+  const keepCard = () => {
+    const sv = savedNovelsNow().get(id);
+    const d = sv && chapters ? novelDiff(id, chapters) : { fresh: [], changed: [], resplit: false };
+    if (!sv?.saved.size) {
+      return navigator.onLine ? html`
+        <div class="dl-keep is-empty">
+          <span class="dl-keep-ic">${icon('download', 18)}</span>
+          <span class="dl-keep-t"><b>오프라인으로 읽기</b><small>회차를 받아 두면 인터넷 없이 읽을 수 있어요</small></span>
+          <button type="button" class="dl-main is-sm" data-action="dl">회차 받기</button>
+        </div>` : '';
+    }
+    return html`
+      <section class="dl-keep" aria-label="오프라인 보관">
+        <div class="flex items-center gap-2.5">
+          <span class="dl-keep-ic is-ok">${icon('download', 18)}</span>
+          <span class="dl-keep-t"><b>오프라인 보관 중 · ${sv.saved.size}화</b><small>${fmtBytes(sv.bytes)} · 이 브라우저에 저장됨</small></span>
+          ${navigator.onLine ? html`<button type="button" class="dl-main is-sm" data-action="dl">회차 받기</button>` : ''}
+        </div>
+        <div class="flex items-center gap-1.5 flex-wrap">
+          ${d.resplit || sv.rec.resplit ? html`<span class="dl-badge is-acc">회차가 새로 나뉨</span>` : ''}
+          ${d.fresh.length ? html`<span class="dl-badge is-acc">새 회차 ${d.fresh.length}</span>` : ''}
+          ${d.changed.length ? html`<span class="dl-badge is-acc">바뀐 회차 ${d.changed.length}</span>` : ''}
+          <span class="flex-1"></span>
+          <a href="#/downloads" class="text-[13px] no-underline">관리 ›</a>
+        </div>
+      </section>`;
   };
 
   const jump = () => {
@@ -332,7 +476,10 @@ export function renderNovel(view, id) {
     sort() { desc = !desc; setChapterSortDesc(id, desc); draw(); },
     jump,
     cover() { if (novel) openCover(novel); },
+    async dl() { if (novel) { await openNovelDownload([novel]); if (view.isConnected) draw(); } },
   });
+  const offSaved = onSaved(() => { if (view.isConnected && chapters) draw(); });
+  refreshIndex().catch(() => {});
   const jumpers = attachScrollJump(view);
   const syncJump = () => {
     const cont = chapters ? continueTarget(chapters, novelReading(id)) : null;
@@ -359,7 +506,7 @@ export function renderNovel(view, id) {
       if (!scrolled) { scrolled = true; requestAnimationFrame(jump); }
     } catch (err) { error = errorMessage(err); if (!chapters) draw(); else toast(error); }
   })();
-  return () => { jumpers.destroy(); closeCover(); };
+  return () => { jumpers.destroy(); closeCover(); offSaved(); };
 }
 
 // ---------------------------------------------------------------------

@@ -5,10 +5,13 @@
  *       본문은 새로 받은 걸 우선, 실패하면 저장본 / 이미지는 저장본 우선
  *       로그아웃·차단 시 앱이 seojae-content 를 지움
  *   - 로그인·목록·읽기 기록(API)은 저장하지 않음 (앱이 따로 기기 캐시 사용)
+ *   - 다운로드한 글(seojae-content-dl): 앱이 직접 넣고 지움. 여기서는 오프라인 대체로만 찾아 봄
+ *       앱의 다운로드 요청(cache: 'no-store')은 건드리지 않음 → 열어 본 글 저장 공간이 밀려나지 않음
  */
 const VERSION = '__VERSION__';
 const SHELL = `seojae-shell-${VERSION}`;
 const CONTENT = 'seojae-content';
+const DL = 'seojae-content-dl';
 const FONTS = 'seojae-fonts';
 const PRECACHE = __PRECACHE__;
 const CONTENT_MAX = 400;
@@ -36,6 +39,13 @@ async function trim(cache, max) {
   for (let i = 0; i < keys.length - max; i++) await cache.delete(keys[i]);
 }
 
+// 열어 본 글 → 다운로드한 글 순서로 찾기
+async function matchStored(key) {
+  const a = await (await caches.open(CONTENT)).match(key, { ignoreVary: true });
+  if (a) return a;
+  return (await caches.open(DL)).match(key, { ignoreVary: true });
+}
+
 async function networkFirst(req, cacheName, key, timeout = 0) {
   const cache = await caches.open(cacheName);
   try {
@@ -44,7 +54,7 @@ async function networkFirst(req, cacheName, key, timeout = 0) {
     if (res.ok) { cache.put(key, res.clone()); if (cacheName === CONTENT) trim(cache, CONTENT_MAX); }
     return res;
   } catch (err) {
-    const hit = await cache.match(key, { ignoreVary: true });
+    const hit = cacheName === CONTENT ? await matchStored(key) : await cache.match(key, { ignoreVary: true });
     if (hit) return hit;
     throw err;
   }
@@ -52,7 +62,7 @@ async function networkFirst(req, cacheName, key, timeout = 0) {
 
 async function cacheFirst(req, cacheName, key) {
   const cache = await caches.open(cacheName);
-  const hit = await cache.match(key, { ignoreVary: true });
+  const hit = cacheName === CONTENT ? await matchStored(key) : await cache.match(key, { ignoreVary: true });
   if (hit) return hit;
   const res = await fetch(req);
   if (res.ok || res.type === 'opaque') { cache.put(key, res.clone()); if (cacheName === CONTENT) trim(cache, CONTENT_MAX); }
@@ -90,6 +100,7 @@ self.addEventListener('fetch', (e) => {
 
   // Supabase Storage (본문·이미지). 서명 토큰 등 주소 뒤 ?… 는 빼고 저장
   if (url.pathname.includes('/storage/v1/object/')) {
+    if (req.cache === 'no-store') return;   // 앱의 다운로드 요청
     const key = url.origin + url.pathname;
     if (url.pathname.includes('/object/sign/')) e.respondWith(cacheFirst(req, CONTENT, key));
     else e.respondWith(networkFirst(req, CONTENT, key, 8000));

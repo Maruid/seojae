@@ -1,6 +1,8 @@
 // 소설 목록 · 회차 목록 · 회차 본문 불러오기
 import { supabase } from './supabase.js';
 import { STORAGE_BUCKET } from '../config.js';
+import { savedChapterText, replaceChapter } from './offline/index.js';
+import { getItem } from './offline/store.js';
 
 const LIST_KEY = 'list:novels';
 const chKey = (id) => `list:novel:${id}`;
@@ -29,22 +31,33 @@ export async function loadNovels({ force = false } = {}) {
 
 // 회차 목록 (seq 순서). 887화 같은 긴 소설도 1,000개씩 나눠 받음
 const chapters = new Map();   // id → { at, list }
-export const cachedChapters = (id) => chapters.get(id)?.list || read(chKey(id));
+const BASE_COLS = 'key,seq,title,display_title,char_count,added_at,path,content_hash';
+let sizeCols = true;
+export const cachedChapters = (id) => chapters.get(id)?.list || read(chKey(id))?.map((c) => ({ ...c, novel_id: id })) || null;
 
 export async function loadChapters(id, { force = false } = {}) {
   const c = chapters.get(id);
   if (!force && c && Date.now() - c.at < 120_000) return c.list;
   const list = [];
+  // 008(크기 칸) 전이면 size_bytes 없이
+  let cols = sizeCols ? `${BASE_COLS},size_bytes` : BASE_COLS;
   for (let from = 0; ; from += 1000) {
-    const { data, error } = await supabase.from('novel_chapters')
-      .select('key,seq,title,display_title,char_count,added_at,path')
+    let { data, error } = await supabase.from('novel_chapters').select(cols)
       .eq('novel_id', id).order('seq').range(from, from + 999);
-    if (error) { const old = cachedChapters(id); if (old) return old; throw error; }
-    list.push(...data);
+    if (error?.code === '42703' && cols !== BASE_COLS) {
+      sizeCols = false; cols = BASE_COLS;
+      ({ data, error } = await supabase.from('novel_chapters').select(cols).eq('novel_id', id).order('seq').range(from, from + 999));
+    }
+    if (error) {
+      const old = cachedChapters(id) || (await getItem(`n:${id}`))?.chapters;   // 오프라인: 기기 목록 → 받아 둔 소설 목록
+      if (old) return old.map((c) => ({ ...c, novel_id: id }));
+      throw error;
+    }
+    list.push(...data.map((c) => ({ ...c, novel_id: id })));
     if (data.length < 1000) break;
   }
   chapters.set(id, { at: Date.now(), list });
-  write(chKey(id), list);
+  write(chKey(id), list.map(({ novel_id, ...c }) => c));
   return list;
 }
 
@@ -59,12 +72,24 @@ export async function countNewSince(id, since) {
 // 회차 본문: 메모리 캐시 (다음 회차 미리 받기에도 사용)
 const texts = new Map();
 const pending = new Map();
+//   받아 둔 회차는 저장본이 최신이면 그걸 바로 씀. 바뀐 회차를 온라인에서 열면 서버에서 받아 저장본도 바꿔 넣음 (한도 안 씀)
 export function fetchChapterText(ch) {
   if (texts.has(ch.path)) return Promise.resolve(texts.get(ch.path));
   if (pending.has(ch.path)) return pending.get(ch.path);
-  const job = supabase.storage.from(STORAGE_BUCKET).download(ch.path).then(async ({ data, error }) => {
-    if (error) throw error;
-    const t = await data.text();
+  const job = (async () => {
+    const saved = await savedChapterText(ch).catch(() => null);
+    if (saved?.text != null) return saved.text;
+    const { data, error } = await supabase.storage.from(STORAGE_BUCKET).download(ch.path);
+    if (error) {
+      // 서버에 못 닿으면 옛 저장본이라도
+      const old = saved?.stale ? await savedChapterText({ ...ch, content_hash: null }).catch(() => null) : null;
+      if (old?.text != null) return old.text;
+      throw error;
+    }
+    const text = await data.text();
+    if (saved?.stale) replaceChapter(ch, text).catch(() => {});
+    return text;
+  })().then((t) => {
     texts.set(ch.path, t);
     if (texts.size > 12) texts.delete(texts.keys().next().value);
     return t;

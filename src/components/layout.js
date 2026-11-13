@@ -73,6 +73,19 @@ export function renderShell(app, routeName, { immersive = false, narrowable = fa
   return shell.content;
 }
 
+// 오프라인 띠 (화면 맨 위, 받아 둔 글만 열 수 있다는 안내)
+export function setOfflineBand(on) {
+  let el = document.querySelector('.off-band');
+  if (!on) { el?.remove(); document.documentElement.classList.remove('is-offline'); return; }
+  document.documentElement.classList.add('is-offline');
+  if (el) return;
+  el = document.createElement('div');
+  el.className = 'off-band';
+  el.setAttribute('role', 'status');
+  el.innerHTML = '<span>오프라인 · 받아 둔 글과 열어 본 글만 볼 수 있어요</span><a href="#/downloads">보관함</a>';
+  document.body.prepend(el);
+}
+
 // 로그인·승인 대기처럼 메뉴가 없는 화면
 export function renderBare() {
   shell = null;

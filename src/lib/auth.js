@@ -1,5 +1,6 @@
 import { supabase, rpc } from './supabase.js';
 import { APP_URL } from '../config.js';
+import { clearOffline } from './offline/store.js';
 
 const RETURN_KEY = 'auth:returnTo';
 const LAST_ME_KEY = 'me:last';
@@ -92,8 +93,9 @@ export function clearPrivateData() {
     if (k && PRIVATE_PREFIXES.some((p) => k.startsWith(p))) keys.push(k);
   }
   keys.forEach((k) => { try { localStorage.removeItem(k); } catch {} });
-  // 오프라인용 콘텐츠 캐시 (4단계 PWA 에서 사용)
+  // 열어 본 글 저장 공간 + 다운로드한 글(파일·기록)
   if (window.caches) caches.keys().then((ks) => ks.filter((k) => k.startsWith('seojae-content')).forEach((k) => caches.delete(k)));
+  clearOffline();
 }
 
 export async function signOut() {

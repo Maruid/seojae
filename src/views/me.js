@@ -5,6 +5,39 @@ import { getPrefs, setPrefs } from '../lib/prefs.js';
 import { FONTS, APP_FONTS, loadFont } from '../lib/fonts.js';
 import { initial } from '../components/layout.js';
 import { canAccess } from '../lib/nav.js';
+import { icon } from '../components/icons.js';
+import { cachedQuota, loadQuota, quotaMissing, resetText, onQuota } from '../lib/offline/quota.js';
+import { fmtBytes, usedRatio } from '../lib/offline/plan.js';
+import { refreshIndex, savedNovelsNow, savedColumnsNow, onSaved } from '../lib/offline/index.js';
+
+const MODE_TEXT = { auto: '자동 (나눌 양을 승인된 인원이 똑같이 나눔)', stopped: '자동 · 이번 달 몫을 다 씀', direct: '관리자가 정한 한도', admin: '관리자 · 한도 없음' };
+
+// 이번 달 다운로드 + 다운로드 관리 바로 가기
+function quotaCard() {
+  const q = cachedQuota();
+  const nv = savedNovelsNow(); const cl = savedColumnsNow();
+  let total = 0; for (const x of nv.values()) total += x.bytes; for (const c of cl.values()) total += c.bytes || 0;
+  const r = usedRatio(q);
+  const left = q && !q.unlimited ? Math.max(0, (q.limit || 0) - (q.used || 0)) : 0;
+  return html`
+    <section class="bg-surface border border-line rounded-2xl p-4 flex flex-col gap-2.5" aria-labelledby="dlq">
+      <div class="flex items-center gap-2"><h2 id="dlq" class="m-0 text-[15px] font-bold flex-1">이번 달 다운로드</h2>
+        ${q && !q.unlimited ? html`<span class="text-xs text-muted">${resetText(q)}에 다시 채워짐</span>` : ''}</div>
+      ${quotaMissing() ? html`<p class="m-0 text-sm text-muted">관리자가 서버 설정(migration_009)을 마치면 쓸 수 있어요.</p>`
+        : !q ? html`<p class="m-0 text-sm text-muted">불러오는 중…</p>`
+        : q.unlimited ? html`<p class="m-0 text-sm">관리자 · 한도 없음 <span class="text-muted">· 이번 달 ${fmtBytes(q.used)} 받음</span></p>`
+        : html`
+          <div class="flex items-baseline gap-1.5"><b class="text-[26px]">${fmtBytes(left)}</b><span class="text-[13px] text-muted">남음 · ${fmtBytes(q.limit)} 중 ${fmtBytes(q.used)} 씀</span></div>
+          <div class="dl-bar is-lg" role="progressbar" aria-label="이번 달 사용량" aria-valuenow="${Math.round(r * 100)}" aria-valuemin="0" aria-valuemax="100"><i style="width:${Math.min(100, r * 100)}%" class="${r >= 0.8 ? 'is-over' : ''}"></i></div>
+          ${r >= 0.8 ? html`<p class="dl-warn">이번 달 한도의 ${Math.round(r * 100)}%를 썼어요. 남은 ${fmtBytes(left)} 안에서 받을 수 있어요.</p>` : ''}
+          <small class="text-xs text-muted leading-relaxed">한도: ${MODE_TEXT[q.mode] || '자동'}. 다운로드로 서버에서 받은 양만 세요.</small>`}
+      <a href="#/downloads" class="min-h-[44px] flex items-center gap-2 border-t border-line-soft pt-2 text-ink no-underline">
+        ${icon('download', 18)}<span class="flex-1">다운로드 관리</span>
+        <span class="text-[13px] text-muted">${canAccessAny() ? `소설 ${nv.size} · 칼럼 ${cl.size} · ${fmtBytes(total)}` : ''}</span><span class="text-muted">›</span></a>
+      <small class="text-xs text-muted -mt-1">이 브라우저에 저장됨 · 다른 브라우저(앱)에서는 따로 받아요</small>
+    </section>`;
+}
+const canAccessAny = () => true;
 
 const chip = (on) => `h-[38px] px-3 rounded-[10px] text-sm cursor-pointer ${on
   ? 'border border-ink bg-ink text-bg font-bold'
@@ -37,6 +70,8 @@ export function renderMe(view, app, { onNameChanged }) {
             </div>
             <button type="button" data-action="edit-name" class="h-9 px-3 rounded-[10px] border border-line bg-transparent text-[13px] cursor-pointer shrink-0">이름 변경</button>`}
         </div>
+
+        ${canAccess(app.me, 'novel') || canAccess(app.me, 'column') ? quotaCard() : ''}
 
         <section class="flex flex-col gap-3.5">
           <h2 class="m-0 text-sm font-bold text-muted">화면 설정 · 이 기기</h2>
@@ -76,12 +111,15 @@ export function renderMe(view, app, { onNameChanged }) {
 
         <section class="bg-surface border border-line rounded-2xl flex flex-col">
           <a href="#/install" class="min-h-[52px] px-4 flex items-center justify-between text-ink no-underline border-b border-line">앱으로 설치<span class="text-muted">›</span></a>
-          <button type="button" data-action="logout" class="min-h-[52px] px-4 border-0 bg-transparent text-accent-ink text-left cursor-pointer">로그아웃</button>
+          <button type="button" data-action="logout" class="min-h-[52px] px-4 border-0 bg-transparent text-accent-ink text-left cursor-pointer">로그아웃 <span class="text-xs text-muted">· 받아 둔 글도 지워져요</span></button>
         </section>
       </div>`);
   };
 
   draw();
+  const offs = [onQuota(() => { if (view.isConnected) draw(); }), onSaved(() => { if (view.isConnected) draw(); })];
+  if (navigator.onLine) loadQuota().catch(() => {});
+  refreshIndex().catch(() => {});
 
   onAction(view, {
     'edit-name'() { editing = true; draw(); view.querySelector('#name-input')?.focus(); },
@@ -105,4 +143,5 @@ export function renderMe(view, app, { onNameChanged }) {
       toast('이름을 바꿨어요.');
     } catch (err) { toast(errorMessage(err)); }
   });
+  return () => offs.forEach((f) => f());
 }

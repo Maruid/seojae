@@ -17,6 +17,9 @@ import { createChrome } from '../components/readerChrome.js';
 import { openViewSettings, closeViewSettings, viewSettingsOpen } from '../components/viewSettings.js';
 import { icon } from '../components/icons.js';
 import { getPane, revealActive, filteredColumns, listState } from './columns.js';
+import { isColumnSaved, savedColumnsNow, refreshIndex } from '../lib/offline/index.js';
+import { openColumnDownload } from '../components/dlFlow.js';
+import { fmtBytes } from '../lib/offline/plan.js';
 
 const wide = () => matchMedia('(min-width: 1024px)').matches;
 export { appDark };
@@ -135,6 +138,12 @@ export function renderColumn(view, app, id) {
       else saveReading('column', id, { finished_at: true });
       drawEnd();
     },
+    async dlOne() {
+      if (!col || isColumnSaved(id)) return;
+      await openColumnDownload([col], { title: '이 글 받기' });
+      await refreshIndex().catch(() => {});
+      drawEnd();
+    },
   }));
 
   const endEl = document.createElement('footer');
@@ -151,6 +160,8 @@ export function renderColumn(view, app, id) {
         <button type="button" class="re-btn ${read ? 'is-on' : ''}" data-action="toggleRead" aria-pressed="${String(read)}">
           ${icon('check', 18, 2.4)}${read ? '읽음' : '다 읽음으로 표시'}</button>
         ${col.source_url ? html`<a class="re-btn" href="${col.source_url}" target="_blank" rel="noopener noreferrer">원문 보기 ${icon('external', 16)}</a>` : ''}
+        ${isColumnSaved(id) ? html`<span class="re-btn is-on" aria-label="받아 둠">${icon('download', 17, 2.2)}받아 둠 · ${fmtBytes(savedColumnsNow().get(id)?.bytes)}</span>`
+          : navigator.onLine ? html`<button type="button" class="re-btn" data-action="dlOne">${icon('download', 17, 2.2)}오프라인으로 받기</button>` : ''}
       </div>
       ${read ? html`<p style="margin:0;font-size:12px;color:var(--r-muted)">다시 누르면 안 읽음으로 바뀌어요.</p>` : ''}
       ${(col.tags || []).length ? html`<div class="re-tags">${col.tags.map((t) => html`<span>#${t}</span>`)}</div>` : ''}
@@ -187,7 +198,9 @@ export function renderColumn(view, app, id) {
         <header class="reader-head">
           <div class="rh-cat">${col.category || ''}</div>
           <h1>${col.title}</h1>
-          <div class="rh-meta"><span>${fmtDate(col.published_at)}</span>${col.author ? html`<span>· ${col.author}</span>` : ''}</div>
+          <div class="rh-meta"><span>${fmtDate(col.published_at)}</span>${col.author ? html`<span>· ${col.author}</span>` : ''}
+            ${isColumnSaved(id) ? html`<span class="rh-dl" aria-label="받아 둠">${icon('download', 13, 2.4)}받아 둠</span>`
+              : navigator.onLine ? html`<button type="button" class="rh-dl is-btn" data-action="dlOne">${icon('download', 13, 2.4)}받기</button>` : ''}</div>
         </header>`);
       inner.append(el, endEl);
       drawEnd();

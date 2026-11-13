@@ -80,6 +80,7 @@ insert into public.grants(user_id, sector)
 1. Supabase SQL Editor 에서 `supabase/migration_004_genres_cover.sql` 실행 (장르 여러 개 + 표지 칸, 다시 실행해도 안전)
 1. 표지를 쓰려면 동기화 폴더에서 `pip install pillow` 한 번
 1. Supabase SQL Editor 에서 `supabase/migration_006_cover_large.sql` 실행 (표지 크게 보기용 칸)
+1. Supabase SQL Editor 에서 `supabase/migration_008_download_sizes.sql` · `supabase/migration_009_downloads.sql` 실행 (오프라인 다운로드: 크기 칸 · 사용자별 월 한도)
 1. Supabase SQL Editor 에서 `supabase/migration_007_genre_list.sql` 실행 (장르 목록 고정 + 자동 정리) → `supabase/tools/genre_cleanup_1_preview.sql` 로 확인 → `genre_cleanup_2_apply.sql` 로 기존 소설 정리
 2. 이 저장소 push → 배포
 3. 앱 **관리 › 소설 정보** 에서 소설마다 작가·장르·태그 입력
@@ -120,4 +121,5 @@ npm test                     # escape · 라우터 · 권한별 탭 · 본문 �
 - [x] 읽기 화면 v2: 반투명 위·아래 바, 고정, 진행 막대 + % 입력, 정보 팝업, 글 안 검색, 줄 단위 즉시 넘기기, 전체 화면, 글자 두께 / 소설 작가·장르·태그 + 목록 필터 (migration_003)
 - [x] 소설 표지(같은 이름 이미지 → upload.py) + 바둑판형 목록, 장르 여러 개 (migration_004) / 섞인 회차 제목 형식 인식 · 보류 · --force / --split
 - [x] v2.6: 홈 이어 읽기(소설 표지 줄 + 칼럼 5개), 소설 탭 보기 3종 · 검색 · 필터 창 · 바로 가기 · 표지 크게 보기, 칼럼 분류 선택 상자 (migration_006)
+- [x] v2.8: 오프라인 다운로드 (소설·칼럼 받기 창 · 여러 편 · 카드 메뉴 · 다운로드 관리 · 사용자별 월 한도 · 30일 잠금, migration_008·009)
 - [x] v2.7: 장르 18개 목록 고정 · 별칭 · 목록에 없는 장르는 태그로 (migration_007 + 정리 SQL), 관리 편집 장르 고르기 + 자동완성

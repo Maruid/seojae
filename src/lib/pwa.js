@@ -66,12 +66,12 @@ function showUpdate(worker) {
 export async function contentCacheInfo() {
   let count = 0;
   if (window.caches) {
-    for (const k of await caches.keys()) if (k.startsWith('seojae-content')) count += (await (await caches.open(k)).keys()).length;
+    for (const k of await caches.keys()) if (k === 'seojae-content') count += (await (await caches.open(k)).keys()).length;
   }
   const est = navigator.storage?.estimate ? await navigator.storage.estimate().catch(() => null) : null;
   return { count, usage: est?.usage || 0 };
 }
 export async function clearContentCache() {
   if (!window.caches) return;
-  for (const k of await caches.keys()) if (k.startsWith('seojae-content')) await caches.delete(k);
+  await caches.delete('seojae-content');   // 다운로드한 글(seojae-content-dl)은 그대로
 }

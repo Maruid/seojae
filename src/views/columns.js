@@ -6,6 +6,8 @@ import { errorMessage } from '../lib/supabase.js';
 import { loadColumns, cachedColumns, categoriesOf, fmtDate, monthOf } from '../lib/columns.js';
 import { loadReading, getReading, statusOf, onReadingChange } from '../lib/progress.js';
 import { icon } from '../components/icons.js';
+import { isColumnSaved, savedColumnsNow, refreshIndex, onSaved } from '../lib/offline/index.js';
+import { openColumnDownload } from '../components/dlFlow.js';
 
 const STATE_KEY = 'ui:colList';
 const FILTERS = [['all', '전체'], ['unread', '안 읽음'], ['reading', '읽는 중'], ['read', '읽음']];
@@ -57,6 +59,8 @@ function createPane() {
       <div class="sticky top-0 z-10 bg-bg lg:bg-surface">
         <header class="h-16 px-5 lg:px-5 flex items-center gap-2">
           <h1 class="m-0 flex-1 text-[22px] font-bold">칼럼</h1>
+          ${navigator.onLine ? html`<button type="button" data-action="dl" aria-label="${st.cat ? `${st.cat} 받기` : '칼럼 받기'}" title="오프라인으로 받기"
+            class="w-11 h-11 rounded-full border-0 bg-transparent text-ink cursor-pointer flex items-center justify-center hover-mouse:bg-chip">${icon('download', 20)}</button>` : ''}
           <button type="button" data-action="search" aria-label="검색" aria-pressed="${String(p.searching)}"
             class="w-11 h-11 rounded-full border-0 bg-transparent text-ink cursor-pointer flex items-center justify-center hover-mouse:bg-chip ${p.searching ? 'bg-chip' : ''}">${icon('search')}</button>
         </header>
@@ -93,13 +97,15 @@ function createPane() {
           const r = getReading('column', c.id);
           const s = statusOf(r);
           const on = c.id === p.activeId;
+          const saved = isColumnSaved(c.id);
           return html`${head}
             <a role="listitem" href="#/c/${encodeURIComponent(c.id)}" data-id="${c.id}" ${on ? html`aria-current="true"` : ''}
-               class="relative block no-underline px-5 py-3 ${on ? 'bg-chip' : 'hover-mouse:bg-chip/50'}">
+               class="relative block no-underline px-5 py-3 ${on ? 'bg-chip' : 'hover-mouse:bg-chip/50'} ${!navigator.onLine && !saved ? 'is-off' : ''}">
               ${s === 'unread' ? html`<span class="absolute left-2 top-[19px] w-1.5 h-1.5 rounded-full bg-accent" aria-label="안 읽음"></span>` : ''}
               <span class="block text-[15px] leading-snug ${s === 'read' ? 'text-muted' : 'text-ink font-medium'}">${c.title}</span>
               <span class="flex items-center gap-2 mt-1 text-xs text-muted">
                 <span>${c.category || '기타'}</span><span aria-hidden="true">·</span><span>${fmtDate(c.published_at)}</span>
+                ${saved ? html`<span class="text-ok-ink flex items-center" aria-label="받아 둠" title="받아 둠">${icon('download', 13, 2.4)}</span>` : ''}
                 ${s === 'reading' ? html`<span class="ml-auto flex items-center gap-1.5" aria-label="${Math.round((r.progress || 0) * 100)}% 읽음">
                   <span class="w-12 h-1 rounded-full bg-line overflow-hidden"><span class="block h-full bg-accent" style="width:${Math.max(4, Math.round((r.progress || 0) * 100))}%"></span></span></span>` : ''}
                 ${s === 'read' ? html`<span class="ml-auto text-ok-ink flex items-center gap-0.5">${icon('check', 14, 2.4)}읽음</span>` : ''}
@@ -118,6 +124,12 @@ function createPane() {
   });
   onAction(el, {
     filter(b) { setListState({ filter: b.dataset.v }); p.draw(); },
+    async dl() {
+      const st = listState();
+      const cols = (p.cols || []).filter((c) => !st.cat || (c.category || '기타') === st.cat);
+      await openColumnDownload(cols, { title: st.cat ? `칼럼 받기 · ${st.cat}` : '칼럼 받기 · 전체' });
+      if (el.isConnected) p.draw();
+    },
     sort() { setListState({ sort: listState().sort === 'new' ? 'old' : 'new' }); p.draw(); },
     search() {
       p.searching = !p.searching;
@@ -134,6 +146,8 @@ function createPane() {
   });
 
   onReadingChange(() => { if (el.isConnected) p.draw(); });
+  onSaved(() => { if (el.isConnected) p.draw(); });
+  refreshIndex().catch(() => {});
 
   p.refresh = async () => {
     try {

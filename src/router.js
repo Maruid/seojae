@@ -10,6 +10,7 @@ export const ROUTES = [
   { name: 'novel', path: '/n/:id' },
   { name: 'chapter', path: '/n/:id/:key' },
   { name: 'me', path: '/me' },
+  { name: 'downloads', path: '/downloads' },
   { name: 'admin', path: '/admin' },
   { name: 'install', path: '/install' },
 ];

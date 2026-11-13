@@ -23,28 +23,9 @@ function ago(iso) {
 }
 
 // 확인 창 (window.confirm 대신 화면 안에서)
-export function confirmBox({ title, body, ok = '확인', danger = false }) {
-  return new Promise((resolve) => {
-    const root = document.createElement('div');
-    root.className = 'cf-root';
-    mount(root, html`
-      <div class="cf-back" data-action="no"></div>
-      <div class="cf-box" role="alertdialog" aria-modal="true" aria-label="${title}">
-        <strong>${title}</strong>
-        ${body ? html`<p>${body}</p>` : ''}
-        <div class="cf-btns">
-          <button type="button" data-action="no">취소</button>
-          <button type="button" data-action="yes" class="${danger ? 'is-danger' : 'is-main'}">${ok}</button>
-        </div>
-      </div>`);
-    document.body.appendChild(root);
-    const done = (v) => { off(); document.removeEventListener('keydown', key, true); root.remove(); resolve(v); };
-    const off = onAction(root, { yes: () => done(true), no: () => done(false) });
-    const key = (e) => { if (e.key === 'Escape') { e.stopPropagation(); done(false); } };
-    document.addEventListener('keydown', key, true);
-    root.querySelector('[data-action="yes"]').focus();
-  });
-}
+export { confirmBox } from '../components/modal.js';
+import { confirmBox } from '../components/modal.js';
+import { createDlAdmin } from './adminDownloads.js';
 
 export function renderAdmin(view, app, { onPendingChange } = {}) {
   let users = null;
@@ -55,6 +36,7 @@ export function renderAdmin(view, app, { onPendingChange } = {}) {
   let menuFor = null;          // ⋯ 메뉴가 열린 user_id
   let tab = sessionStorage.getItem('ui:adminTab') || 'users';   // users | novels
   const nv = createNovelAdmin(() => { if (view.isConnected) draw(); });
+  const dla = createDlAdmin(() => { if (view.isConnected) draw(); });
   const busy = new Set();      // 저장 중인 user_id
   const sectors = (app.me.sectors || []).filter((s) => s.key);
   const myId = app.session?.user?.id;
@@ -145,14 +127,18 @@ export function renderAdmin(view, app, { onPendingChange } = {}) {
         <button type="button" data-action="reload" class="h-9 px-3 rounded-[10px] border border-line bg-transparent text-[13px] cursor-pointer hover-mouse:bg-chip">새로고침</button>
       </header>
       <div class="px-5 lg:px-12 pb-3 max-w-[880px]">
-        <div role="tablist" aria-label="관리 항목" class="grid grid-cols-2 gap-1 p-1 rounded-xl bg-chip">
-          ${[['users', `사용자${c.pending ? ` · 대기 ${c.pending}` : ''}`], ['novels', '소설 정보']].map(([k, l]) => html`
+        <div role="tablist" aria-label="관리 항목" class="grid grid-cols-3 gap-1 p-1 rounded-xl bg-chip">
+          ${[['users', `사용자${c.pending ? ` · 대기 ${c.pending}` : ''}`], ['novels', '소설 정보'], ['downloads', '다운로드 한도']].map(([k, l]) => html`
             <button type="button" role="tab" aria-selected="${String(tab === k)}" data-action="tab" data-v="${k}"
               class="h-9 rounded-[10px] border-0 text-sm cursor-pointer ${tab === k ? 'bg-surface text-ink font-bold shadow-sm' : 'bg-transparent text-muted'}">${l}</button>`)}
         </div>
       </div>`;
     if (tab === 'novels') {
       mount(view, html`${head}<div class="px-5 lg:px-12 pb-10 max-w-[880px] flex flex-col gap-4">${nv.render()}</div>`);
+      return;
+    }
+    if (tab === 'downloads') {
+      mount(view, html`${head}<div class="px-5 lg:px-12 pb-10 max-w-[1100px] flex flex-col gap-4">${dla.render()}</div>`);
       return;
     }
     mount(view, html`${head}
@@ -211,11 +197,12 @@ export function renderAdmin(view, app, { onPendingChange } = {}) {
     () => rpc('admin_set_status', { p_user: id, p_status: status }), msg);
 
   onAction(view, {
-    reload() { if (tab === 'novels') nv.load(true); else load(); },
+    reload() { if (tab === 'novels') nv.load(true); else if (tab === 'downloads') dla.load(); else load(); },
     tab(b) {
       tab = b.dataset.v;
       try { sessionStorage.setItem('ui:adminTab', tab); } catch {}
       if (tab === 'novels' && !nv.loaded) nv.load();
+      if (tab === 'downloads') dla.load();
       draw();
     },
     ...nv.handlers,
@@ -264,10 +251,12 @@ export function renderAdmin(view, app, { onPendingChange } = {}) {
 
   view.addEventListener('keydown', (e) => nv.onKeydown(e, view));
   view.addEventListener('input', (e) => nv.onInput(e, view));
-  view.addEventListener('submit', (e) => nv.onSubmit(e, view));
+  view.addEventListener('submit', (e) => { if (tab === 'downloads') dla.onSubmit(e); else nv.onSubmit(e, view); });
+  view.addEventListener('change', (e) => { if (tab === 'downloads') dla.onChange(e); });
 
   draw();
   load();
   if (tab === 'novels') nv.load();
+  if (tab === 'downloads') dla.load();
   return () => document.removeEventListener('click', outside, true);
 }

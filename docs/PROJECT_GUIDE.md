@@ -324,3 +324,15 @@ seojae\                  (git 저장소) 사이트 코드
 - 태그: `#`·공백 제거, 20자·20개까지
 - DB 트리거 `novels_clean_genres` 가 마지막 안전망. 업로더도 같은 규칙: `docs/GENRE_RULES_SPEC.md`
 - 목록을 바꾸려면 `genre_list` 를 고치고, 이미 있는 소설은 `tools/genre_cleanup_*` 를 다시 실행
+
+### 오프라인 다운로드 (v2.8, migration_008 · 009)
+- 코드: `src/lib/offline/` — `plan.js`(순수 함수: 추천·용량 맞추기·서버 비교·잠금), `store.js`(Cache·IndexedDB), `quota.js`(한도 RPC), `engine.js`(받기), `index.js`(조회·지우기·서버와 맞추기), 화면은 `components/dlSheet.js`(받기 창) · `components/dlFlow.js`(확인→창→진행) · `views/downloads.js` · `views/adminDownloads.js` · `views/locked.js`
+- 파일 키는 서비스 워커와 같은 규칙(Storage 주소에서 ?토큰 뺀 것). 회차·md 는 `/object/content/<path>`, 표지·이미지는 `/object/sign/content/<path>`
+- 받기 요청은 `cache: 'no-store'` → 서비스 워커가 건드리지 않음(열어 본 글 저장 공간 400개가 밀려나지 않게). 서비스 워커는 오프라인일 때 다운로드 저장본도 찾아 봄
+- 읽기: 저장본의 해시 = 서버 해시면 저장본, 다르면(온라인) 서버에서 받아 저장본 교체(한도 안 씀), 오프라인이면 옛 저장본
+- 이미지: 받아 둔 건 blob 주소, 오프라인이면 토큰 없는 주소(서비스 워커가 열어 본 저장본에서 찾음)
+- 한도: `dl_my_quota()` · `dl_add_usage(bytes)`(1MB 마다 모아서) · 관리자 `dl_admin_settings/quotas/set_settings/set_override`. 앱이 지키는 한도(승인된 사용자가 마음먹고 우회하면 못 막음)
+- 서버와 맞추기(`reconcile`): 앱 시작 2.5초 뒤·다시 연결될 때(자동 받기 포함), 다운로드 관리 화면을 열 때(상태만)
+- 다시 나뉨: 받은 회차의 절반 이상이 바뀌거나 사라지면 예전 범위를 비율로 새 목록에 맞춰 다시 받음 → 다 받으면 옛 회차 지움
+- 잠금: IndexedDB `kv.lastOnline`. 온라인 확인(ensure_profile 성공) 때마다 갱신, 오프라인 + 30일 초과면 읽기 화면 대신 잠금 안내
+

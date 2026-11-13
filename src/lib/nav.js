@@ -15,7 +15,7 @@ export function tabsFor(me) {
     const make = SECTOR_TAB[s.kind];
     if (make && !tabs.some((t) => t.key === make(s).key)) tabs.push(make(s));
   }
-  tabs.push({ key: 'me', label: '내 정보', href: '#/me', icon: 'me', match: ['me', 'install'] });
+  tabs.push({ key: 'me', label: '내 정보', href: '#/me', icon: 'me', match: ['me', 'install', 'downloads'] });
   if (me?.is_admin) tabs.push({ key: 'admin', label: '관리', href: '#/admin', icon: 'admin', match: ['admin'] });
   return tabs;
 }

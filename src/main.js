@@ -19,6 +19,13 @@ import { renderAdmin } from './views/admin.js';
 import { renderInstall } from './views/install.js';
 import { initPwa } from './lib/pwa.js';
 import { exitFullscreen } from './lib/fullscreen.js';
+import { renderDownloads } from './views/downloads.js';
+import { renderLocked } from './views/locked.js';
+import { checkLock, isLocked, reconcile, refreshIndex } from './lib/offline/index.js';
+import { offerResume } from './components/dlFlow.js';
+import { loadNovels, loadChapters } from './lib/novels.js';
+import { loadColumns } from './lib/columns.js';
+import { setOfflineBand } from './components/layout.js';
 
 // 앱 전역 상태
 const app = {
@@ -41,6 +48,8 @@ const isApproved = () => app.me && (app.me.status === 'approved' || app.me.is_ad
 
 async function refreshMe() {
   app.me = await loadMe();
+  // 오프라인 보관함: 온라인 확인이 되면 잠금 풀림 · 30일 넘게 확인 못 하면 받아 둔 글 잠금
+  await checkLock(!app.me.offline).catch(() => {});
   if (app.me.is_admin) {
     rpc('admin_stats').then((s) => { app.pendingCount = s.users_pending || 0; app.redrawShell?.(); }).catch(() => {});
   }
@@ -80,9 +89,11 @@ async function route(r) {
   const shellOpts = { immersive: reading, narrowable: ['columns', 'column', 'chapter'].includes(r.name) };
   app.redrawShell = () => renderShell(app, r.name, shellOpts);
   const view = freshView(renderShell(app, r.name, shellOpts));
+  // 30일 넘게 온라인 확인을 못 했으면 읽기 화면 대신 잠금 안내
+  if (reading && !navigator.onLine && isLocked()) return renderLocked(view, app, { retry: async () => { try { await refreshMe(); } catch {} route(app.route); } });
   switch (r.name) {
     case 'home': return renderHome(view, app);
-    case 'me': return renderMe(view, app, { onNameChanged: () => renderShell(app, r.name) });
+    case 'me': app.cleanup = renderMe(view, app, { onNameChanged: () => renderShell(app, r.name) }); return;
     case 'columns':
       if (!canAccess(app.me, 'column')) return renderForbidden(view);
       app.cleanup = renderColumns(view, app);
@@ -108,10 +119,19 @@ async function route(r) {
     case 'install':
       app.cleanup = renderInstall(view);
       return;
+    case 'downloads':
+      app.cleanup = renderDownloads(view, app, offlineCtx());
+      return;
     default:
       return renderPlaceholder(view, r.name);
   }
 }
+
+// 오프라인 보관함이 서버와 맞출 때 쓰는 것들
+const offlineCtx = () => ({
+  canNovel: canAccess(app.me, 'novel'), canColumn: canAccess(app.me, 'column'),
+  loadNovels, loadChapters, loadColumns,
+});
 
 async function boot() {
   applyPrefs();
@@ -141,6 +161,20 @@ async function boot() {
   });
 
   if (app.session) startReadingSync();
+
+  // 오프라인 보관함: 기록 읽기 → (온라인이면) 서버와 맞추기 · 받다 만 것 이어 받기
+  refreshIndex().catch(() => {});
+  const syncOffline = () => {
+    if (!app.session || !isApproved() || !navigator.onLine) return;
+    reconcile({ ...offlineCtx(), auto: true }).then((r) => {
+      if (r?.autoKeys) toast(`보류됐던 바뀐 회차 ${r.autoKeys}화를 받았어요.`);
+    }).catch(() => {}).finally(() => offerResume().catch(() => {}));
+  };
+  setTimeout(syncOffline, 2500);
+  const band = () => setOfflineBand(!navigator.onLine);
+  window.addEventListener('online', () => { band(); refreshMe().then(() => app.redrawShell?.()).catch(() => {}); setTimeout(syncOffline, 1500); });
+  window.addEventListener('offline', () => { band(); checkLock(false).catch(() => {}); });
+  band();
 
   // 창 폭이 PC/모바일 경계를 넘으면 화면 구성을 다시 (칼럼 2단 ↔ 1단)
   matchMedia('(min-width: 1024px)').addEventListener('change', () => {
