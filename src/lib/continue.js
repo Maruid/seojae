@@ -3,7 +3,7 @@
 //   - 아직 다 안 읽었으면 그 회차의 읽던 위치로, 다 읽었으면 그다음 회차의 처음으로
 //   - 다음 회차가 없으면(마지막 화까지 다 읽음) done → 홈에서 뺌. 새 회차가 올라오면 다음 회차가 생겨 다시 나옴
 //   - 회차 목록 전체(수천 행)를 받지 않고, 필요한 회차 한두 줄만 물어봄. 결과는 기기에 기억(기록이 바뀌면 다시)
-import { supabase } from './supabase.js';
+import { supabase, isOffline } from './supabase.js';
 import { novelReading, statusOf } from './progress.js';
 import { cachedChapters, countNewSince } from './novels.js';
 import { lastOpened } from './novelText.js';
@@ -45,6 +45,7 @@ export async function resolveCont(n) {
 
   const list = cachedChapters(n.id);
   let cur = list?.find((c) => c.key === b.key) || null;
+  if (isOffline() && (!list || !cur)) return null;   // 오프라인: 기기에 목록이 없으면 다음에
   let val;
   if (statusOf(b.r) !== 'read') {
     if (!cur) {
@@ -56,6 +57,7 @@ export async function resolveCont(n) {
     // 다 읽은 회차 → 다음 회차 (목록에 있으면 목록에서, 없으면 서버에 한 줄만)
     let next = null;
     if (list && cur) next = list[list.indexOf(cur) + 1] || null;
+    if (!next && isOffline()) return null;
     if (!next) {
       if (!cur) {
         const { data } = await supabase.from('novel_chapters').select(COLS).eq('novel_id', n.id).eq('key', b.key).maybeSingle();

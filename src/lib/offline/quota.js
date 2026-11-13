@@ -1,7 +1,7 @@
 // 다운로드 한도 (migration_009)
 //   - 내 한도는 서버 함수로 받고 기기에 기억 (오프라인에서도 마지막 값 표시)
 //   - 받은 양은 모아서 dl_add_usage 로 기록 → 기록 후 한도가 돌아옴
-import { rpc } from '../supabase.js';
+import { rpc, isOffline } from '../supabase.js';
 import { roomOf } from './plan.js';
 
 const KEY = 'cache:dlQuota';
@@ -22,6 +22,7 @@ export const quotaMissing = () => missing;
 export const onQuota = (f) => { subs.add(f); return () => subs.delete(f); };
 
 export async function loadQuota() {
+  if (isOffline()) return quota;
   try { missing = false; return keep(await rpc('dl_my_quota')); }
   catch (err) { if (isMissing(err)) { missing = true; return null; } throw err; }
 }

@@ -73,17 +73,21 @@ export function renderShell(app, routeName, { immersive = false, narrowable = fa
   return shell.content;
 }
 
-// 오프라인 띠 (화면 맨 위, 받아 둔 글만 열 수 있다는 안내)
-export function setOfflineBand(on) {
-  let el = document.querySelector('.off-band');
-  if (!on) { el?.remove(); document.documentElement.classList.remove('is-offline'); return; }
-  document.documentElement.classList.add('is-offline');
+// 오프라인 표시
+//   - html.is-offline: 읽기 화면 위 바의 작은 "오프라인" 표시를 켬 (CSS)
+//   - 목록·홈·내 정보: 내용 맨 위에 얇은 한 줄 (고정 아님, 스크롤하면 같이 올라감). 읽기 화면에는 없음
+export function syncOfflineNote(on, reading) {
+  document.documentElement.classList.toggle('is-offline', on);
+  const box = shell?.content;
+  if (!box) return;
+  let el = box.querySelector(':scope > .off-note');
+  if (!on || reading) { el?.remove(); return; }
   if (el) return;
   el = document.createElement('div');
-  el.className = 'off-band';
+  el.className = 'off-note';
   el.setAttribute('role', 'status');
-  el.innerHTML = '<span>오프라인 · 받아 둔 글과 열어 본 글만 볼 수 있어요</span><a href="#/downloads">보관함</a>';
-  document.body.prepend(el);
+  el.innerHTML = '<span>오프라인 · 받아 둔 글과 열어 본 글만 볼 수 있어요</span><a href="#/downloads">보관함 ›</a>';
+  box.prepend(el);
 }
 
 // 로그인·승인 대기처럼 메뉴가 없는 화면

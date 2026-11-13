@@ -84,7 +84,12 @@ self.addEventListener('fetch', (e) => {
   // 앱 화면
   if (url.origin === self.location.origin) {
     if (req.mode === 'navigate') {
-      e.respondWith(networkFirst(req, SHELL, scopeUrl('index.html'), 4000)
+      // 오프라인이면 바로 저장본, 연결이 약하면 1.5초만 기다림
+      if (self.navigator && self.navigator.onLine === false) {
+        e.respondWith(caches.match(scopeUrl('index.html'), { ignoreVary: true }).then((hit) => hit || fetch(req)));
+        return;
+      }
+      e.respondWith(networkFirst(req, SHELL, scopeUrl('index.html'), 1500)
         .catch(() => caches.match(scopeUrl('index.html'), { ignoreVary: true })));
       return;
     }

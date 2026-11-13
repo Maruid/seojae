@@ -334,5 +334,9 @@ seojae\                  (git 저장소) 사이트 코드
 - 한도: `dl_my_quota()` · `dl_add_usage(bytes)`(1MB 마다 모아서) · 관리자 `dl_admin_settings/quotas/set_settings/set_override`. 앱이 지키는 한도(승인된 사용자가 마음먹고 우회하면 못 막음)
 - 서버와 맞추기(`reconcile`): 앱 시작 2.5초 뒤·다시 연결될 때(자동 받기 포함), 다운로드 관리 화면을 열 때(상태만)
 - 다시 나뉨: 받은 회차의 절반 이상이 바뀌거나 사라지면 예전 범위를 비율로 새 목록에 맞춰 다시 받음 → 다 받으면 옛 회차 지움
+- 오프라인이면 서버를 부르지 않음(`isOffline()` — supabase.js): 만료 토큰으로 서버를 부르면 auth-js 가 갱신을 최대 30초 다시 시도하며 모든 요청이 멈춤. 세션은 저장본(`seojae-auth`), 프로필은 `me:last`, 목록·회차는 기기 캐시·보관함, 본문은 보관함 → 열어 본 글 저장 공간
+- 연결이 약할 때: `getSession` 3초, `ensure_profile` 2.5초만 기다리고 마지막 값으로 먼저 열기 → 늦게 온 답(`lateMe()`)으로 바꿔 끼움
+- 읽기 화면은 본문 먼저, 서버 기록(`loadReading({ maxAge: 15s })`)은 뒤에서. 이 기기가 쓴 기록은 `isMine()`(saveReading 이 만든 updated_at)으로 구분 → 다른 기기 기록이 더 새로우면 `components/otherDevice.js` 알림
+- 오프라인 표시: `syncOfflineNote(on, reading)` — html.is-offline + 목록 화면 내용 맨 위 `.off-note`, 읽기 화면은 위 바 `.rb-off`, 바뀔 때 토스트
 - 잠금: IndexedDB `kv.lastOnline`. 온라인 확인(ensure_profile 성공) 때마다 갱신, 오프라인 + 30일 초과면 읽기 화면 대신 잠금 안내
 

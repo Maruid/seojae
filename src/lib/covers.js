@@ -2,7 +2,7 @@
 //   - 비공개 저장소라 서명 주소가 필요 → 7일짜리로 받아 이 기기에 기억
 //   - 서비스 워커가 주소 뒤 토큰을 빼고 저장하므로, 기한이 지난 주소라도 한 번 본 표지는 오프라인에서 보임
 //   - 표지가 바뀌면 파일 이름(해시)이 바뀌어 새로 받음
-import { supabase } from './supabase.js';
+import { supabase, isOffline } from './supabase.js';
 import { STORAGE_BUCKET } from '../config.js';
 
 const KEY = 'cover:urls';
@@ -19,7 +19,7 @@ export async function signCovers(paths) {
   const m = load();
   const now = Date.now();
   const need = [...new Set(paths.filter(Boolean))].filter((p) => !(m[p]?.exp > now + 3600_000));
-  if (!need.length) return false;
+  if (!need.length || isOffline()) return false;
   for (let i = 0; i < need.length; i += 100) {
     const { data, error } = await supabase.storage.from(STORAGE_BUCKET).createSignedUrls(need.slice(i, i + 100), TTL);
     if (error) throw error;

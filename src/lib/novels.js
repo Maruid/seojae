@@ -1,8 +1,8 @@
 // 소설 목록 · 회차 목록 · 회차 본문 불러오기
-import { supabase } from './supabase.js';
+import { supabase, isOffline, offlineError } from './supabase.js';
 import { STORAGE_BUCKET } from '../config.js';
 import { savedChapterText, replaceChapter } from './offline/index.js';
-import { getItem } from './offline/store.js';
+import { getItem, objectKey, fromViewed } from './offline/store.js';
 
 const LIST_KEY = 'list:novels';
 const chKey = (id) => `list:novel:${id}`;
@@ -16,6 +16,7 @@ export const novelById = (id) => (cachedNovels() || []).find((n) => n.id === id)
 
 export async function loadNovels({ force = false } = {}) {
   if (!force && novels && Date.now() - novelsAt < 120_000) return novels;
+  if (isOffline()) { if (cachedNovels()) return novels; throw offlineError(); }
   const q = (cols) => supabase.from('novels').select(cols).order('last_added_at', { ascending: false, nullsFirst: false });
   // 마이그레이션이 덜 됐으면(칸 없음 42703) 있는 칸만으로라도 목록은 보이게: 006(큰 표지) → 004(장르 목록·표지) → 003(작가·장르·태그) → 기본
   let { data, error } = await q('id,title,author,genre,genres,tags,cover_path,cover_large_path,chapter_count,last_added_at,key_mode,updated_at');
@@ -38,6 +39,11 @@ export const cachedChapters = (id) => chapters.get(id)?.list || read(chKey(id))?
 export async function loadChapters(id, { force = false } = {}) {
   const c = chapters.get(id);
   if (!force && c && Date.now() - c.at < 120_000) return c.list;
+  if (isOffline()) {
+    const old = cachedChapters(id) || (await getItem(`n:${id}`))?.chapters?.map((x) => ({ ...x, novel_id: id }));
+    if (old) return old;
+    throw offlineError();
+  }
   const list = [];
   // 008(크기 칸) 전이면 size_bytes 없이
   let cols = sizeCols ? `${BASE_COLS},size_bytes` : BASE_COLS;
@@ -63,6 +69,7 @@ export async function loadChapters(id, { force = false } = {}) {
 
 // 새 회차 수 (그 소설을 마지막으로 연 뒤 추가된 회차)
 export async function countNewSince(id, since) {
+  if (isOffline()) return null;
   const { count, error } = await supabase.from('novel_chapters')
     .select('key', { count: 'exact', head: true }).eq('novel_id', id).gt('added_at', since);
   if (error) return null;
@@ -79,6 +86,12 @@ export function fetchChapterText(ch) {
   const job = (async () => {
     const saved = await savedChapterText(ch).catch(() => null);
     if (saved?.text != null) return saved.text;
+    if (isOffline()) {
+      // 오프라인: 열어 본 글 저장 공간에서 바로 (서버를 부르면 토큰 갱신을 기다리느라 오래 걸림)
+      const hit = await fromViewed(objectKey(ch.path)).catch(() => null);
+      if (hit) return hit.text();
+      throw offlineError();
+    }
     const { data, error } = await supabase.storage.from(STORAGE_BUCKET).download(ch.path);
     if (error) {
       // 서버에 못 닿으면 옛 저장본이라도

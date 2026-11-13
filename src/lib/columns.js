@@ -1,9 +1,9 @@
 // 칼럼 목록·본문 불러오기
 //   목록은 기기에 캐시해 두고 먼저 보여준 뒤 새로 받아 갱신
-import { supabase } from './supabase.js';
+import { supabase, isOffline, offlineError } from './supabase.js';
 import { STORAGE_BUCKET } from '../config.js';
 import { savedColumnMd, replaceColumnMd, savedImageUrl } from './offline/index.js';
-import { signKey } from './offline/store.js';
+import { signKey, objectKey, fromViewed } from './offline/store.js';
 
 const LIST_KEY = 'list:columns';
 const BASE = 'id,title,category,published_at,tags,md_path,links,source_url,author,content_hash,size_bytes';
@@ -20,6 +20,7 @@ export function cachedColumns() {
 
 export async function loadColumns({ force = false } = {}) {
   if (!force && list && Date.now() - fetchedAt < 120_000) return list;
+  if (isOffline()) { if (cachedColumns()) return list; throw offlineError(); }
   const all = [];
   for (let from = 0; ; from += 1000) {
     const q = () => supabase.from('columns').select(fields)
@@ -53,6 +54,11 @@ export async function fetchMd(col) {
   if (mdCache.has(col.id)) return mdCache.get(col.id);
   const saved = await savedColumnMd(col).catch(() => null);
   let text = saved?.text;
+  if (text == null && isOffline()) {
+    const hit = await fromViewed(objectKey(col.md_path)).catch(() => null);
+    if (!hit) throw offlineError();
+    text = await hit.text();
+  }
   if (text == null) {
     const { data, error } = await supabase.storage.from(STORAGE_BUCKET).download(col.md_path);
     if (error) {

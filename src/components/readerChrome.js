@@ -86,6 +86,7 @@ export function createChrome(root, opts) {
         ${opts.small ? html`<small>${opts.small}</small>` : ''}<span>${opts.title || ''}</span>
       </button>
       <div class="rb-icons">
+        <span class="rb-off" title="오프라인 · 받아 둔 글만 열 수 있어요">${icon('wifiOff', 13, 2.2)}오프라인</span>
         ${opts.panelButton ? html`<button type="button" class="rb-btn rb-sm" data-action="panel" aria-label="회차 목록" title="회차 목록">${icon('list', 20)}</button>` : ''}
         <button type="button" class="rb-btn rb-sm ${on ? 'is-on' : ''}" data-action="auto" aria-pressed="${String(on)}"
           aria-label="${on ? '자동 재생 끄기' : '자동 재생'}" title="${on ? '자동 재생 끄기' : '자동 재생'}">${icon(on ? 'stop' : 'play', 20)}</button>

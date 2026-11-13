@@ -2,7 +2,7 @@
 //   - 화면에서는 기기 캐시('cache:reading')를 바로 고치고
 //   - 서버 저장은 보낼 목록('outbox:reading')에 모아 두었다가 묶어서 보냄
 //     (오프라인이어도 기록이 사라지지 않음. 다시 연결되면 자동 전송)
-import { supabase } from './supabase.js';
+import { supabase, isOffline } from './supabase.js';
 
 const CACHE = 'cache:reading';
 const OUTBOX = 'outbox:reading';
@@ -12,6 +12,9 @@ const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } ca
 export const keyOf = (kind, id) => `${kind}:${id}`;
 
 let state = read(CACHE);          // key → row
+// 이 기기에서 쓴 기록 표시 (다른 기기에서 읽은 위치와 구분)
+const mine = new Set(Object.values(read(OUTBOX)).map((r) => r.updated_at));
+export const isMine = (row) => !!row && mine.has(row.updated_at);
 let loadedAt = 0;
 const listeners = new Set();
 export const onReadingChange = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
@@ -39,8 +42,9 @@ export function statusOf(row) {
 }
 
 // 서버에서 내 기록 전체 받기 (보내지 못한 기록은 그대로 우선)
-export async function loadReading({ force = false } = {}) {
-  if (!force && Date.now() - loadedAt < 60_000) return state;
+export async function loadReading({ force = false, maxAge = 60_000 } = {}) {
+  if (!force && Date.now() - loadedAt < maxAge) return state;
+  if (isOffline()) return state;
   // 소설 회차까지 합치면 1,000행(서버 1회 최대)을 넘을 수 있어 나눠서 받음
   const data = [];
   for (let from = 0; ; from += 1000) {
@@ -72,6 +76,7 @@ export function saveReading(kind, id, patch) {
   const k = keyOf(kind, id);
   const prev = state[k] || { item_kind: kind, item_id: id, anchor: null, progress: 0, finished_at: null };
   const row = { ...prev, ...patch, item_kind: kind, item_id: id, updated_at: new Date().toISOString() };
+  mine.add(row.updated_at);
   if (patch.finished_at === true) row.finished_at = prev.finished_at || row.updated_at;
   if (typeof row.progress === 'number') row.progress = Math.max(0, Math.min(1, Math.round(row.progress * 1000) / 1000));
   state = { ...state, [k]: row };

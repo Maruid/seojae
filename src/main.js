@@ -1,5 +1,5 @@
 import { supabase, errorMessage, rpc } from './lib/supabase.js';
-import { getSession, loadMe, cleanAuthUrl, readAuthError } from './lib/auth.js';
+import { getSession, loadMe, lateMe, cleanAuthUrl, readAuthError } from './lib/auth.js';
 import { applyPrefs } from './lib/prefs.js';
 import { startRouter, navigate } from './router.js';
 import { toast } from './lib/dom.js';
@@ -25,7 +25,7 @@ import { checkLock, isLocked, reconcile, refreshIndex } from './lib/offline/inde
 import { offerResume } from './components/dlFlow.js';
 import { loadNovels, loadChapters } from './lib/novels.js';
 import { loadColumns } from './lib/columns.js';
-import { setOfflineBand } from './components/layout.js';
+import { syncOfflineNote } from './components/layout.js';
 
 // 앱 전역 상태
 const app = {
@@ -50,6 +50,16 @@ async function refreshMe() {
   app.me = await loadMe();
   // 오프라인 보관함: 온라인 확인이 되면 잠금 풀림 · 30일 넘게 확인 못 하면 받아 둔 글 잠금
   await checkLock(!app.me.offline).catch(() => {});
+  // 연결이 느려 마지막 프로필로 먼저 열었으면, 답이 오는 대로 바꿔 끼움
+  const late = app.me.slow ? lateMe() : null;
+  if (late) {
+    late.then(async (me) => {
+      const wasOk = isApproved();
+      app.me = me;
+      await checkLock(true).catch(() => {});
+      if (isApproved() !== wasOk) route(app.route); else app.redrawShell?.();
+    }).catch(() => {});
+  }
   if (app.me.is_admin) {
     rpc('admin_stats').then((s) => { app.pendingCount = s.users_pending || 0; app.redrawShell?.(); }).catch(() => {});
   }
@@ -89,6 +99,7 @@ async function route(r) {
   const shellOpts = { immersive: reading, narrowable: ['columns', 'column', 'chapter'].includes(r.name) };
   app.redrawShell = () => renderShell(app, r.name, shellOpts);
   const view = freshView(renderShell(app, r.name, shellOpts));
+  syncOfflineNote(!navigator.onLine, reading);
   // 30일 넘게 온라인 확인을 못 했으면 읽기 화면 대신 잠금 안내
   if (reading && !navigator.onLine && isLocked()) return renderLocked(view, app, { retry: async () => { try { await refreshMe(); } catch {} route(app.route); } });
   switch (r.name) {
@@ -171,10 +182,20 @@ async function boot() {
     }).catch(() => {}).finally(() => offerResume().catch(() => {}));
   };
   setTimeout(syncOffline, 2500);
-  const band = () => setOfflineBand(!navigator.onLine);
-  window.addEventListener('online', () => { band(); refreshMe().then(() => app.redrawShell?.()).catch(() => {}); setTimeout(syncOffline, 1500); });
-  window.addEventListener('offline', () => { band(); checkLock(false).catch(() => {}); });
-  band();
+  // 오프라인 표시: 바뀔 때 잠깐 알림 + 목록 화면 맨 위 한 줄 + 읽기 화면 위 바의 작은 표시
+  const isReading = () => ['column', 'chapter'].includes(app.route?.name);
+  window.addEventListener('online', () => {
+    syncOfflineNote(false, isReading());
+    toast('다시 연결됐어요.');
+    refreshMe().then(() => app.redrawShell?.()).catch(() => {});
+    setTimeout(syncOffline, 1500);
+  });
+  window.addEventListener('offline', () => {
+    syncOfflineNote(true, isReading());
+    toast('오프라인이에요 · 받아 둔 글만 볼 수 있어요', 3500);
+    checkLock(false).catch(() => {});
+  });
+  if (!navigator.onLine) toast('오프라인이에요 · 받아 둔 글만 볼 수 있어요', 3500);
 
   // 창 폭이 PC/모바일 경계를 넘으면 화면 구성을 다시 (칼럼 2단 ↔ 1단)
   matchMedia('(min-width: 1024px)').addEventListener('change', () => {

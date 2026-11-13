@@ -5,7 +5,8 @@ import { html, mount, onAction, toast } from '../lib/dom.js';
 import { errorMessage } from '../lib/supabase.js';
 import { navigate } from '../router.js';
 import { loadColumns, cachedColumns, columnById, fetchMd, signImages, fmtDate } from '../lib/columns.js';
-import { loadReading, getReading, saveReading, statusOf } from '../lib/progress.js';
+import { loadReading, getReading, saveReading, statusOf, isMine } from '../lib/progress.js';
+import { offerOtherDevice, closeOtherDevice } from '../components/otherDevice.js';
 import { getView, setView } from '../lib/view.js';
 import { wantAwake } from '../lib/wakeLock.js';
 import { buildArticle, paintColors, lazyImages } from '../lib/reader-html.js';
@@ -184,7 +185,10 @@ export function renderColumn(view, app, id) {
       chrome.setTitle(`칼럼 · ${col.category || ''}`, col.title);
       chrome.setNav(navOf(neighbors.prev), navOf(neighbors.next));
       document.title = `${col.title} · 서재`;
-      const [md] = await Promise.all([fetchMd(col), loadReading().catch(() => null)]);
+      // 본문부터 바로 (읽던 위치는 기기 기록으로, 서버 기록은 뒤에서)
+      const before = getReading('column', id)?.updated_at || '';
+      cleanups.push(closeOtherDevice);
+      const md = await fetchMd(col);
       if (!alive) return;
 
       const known = new Set((cachedColumns() || []).map((c) => c.id));
@@ -272,6 +276,17 @@ export function renderColumn(view, app, id) {
       }
       if (wasRead) ctrl.setEnded(true);
       chrome.setProgress(ctrl.progress());
+
+      // 다른 기기에서 더 읽은 위치
+      if (navigator.onLine) {
+        loadReading({ maxAge: 15_000 }).then(() => {
+          if (!alive) return;
+          const t = getReading('column', id);
+          if (!t || String(t.updated_at) <= before || isMine(t) || t.finished_at) return;
+          if (Math.abs((t.progress || 0) - ctrl.progress()) < 0.05) return;
+          offerOtherDevice({ text: `다른 기기에서 이 글을 ${Math.round((t.progress || 0) * 100)}%까지 읽었어요.`, goLabel: '그 위치로', go: () => ctrl.restore(t.anchor, t.progress) });
+        }).catch(() => {});
+      }
     } catch (err) {
       if (!alive) return;
       mount(inner, html`<div style="padding:48px 0;display:flex;flex-direction:column;gap:12px">

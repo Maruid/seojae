@@ -1,4 +1,4 @@
-import { supabase, rpc } from './supabase.js';
+import { supabase, rpc, isOffline } from './supabase.js';
 import { APP_URL } from '../config.js';
 import { clearOffline } from './offline/store.js';
 
@@ -11,29 +11,44 @@ const PRIVATE_PREFIXES = ['me:', 'cache:', 'outbox:', 'list:'];
 // ---------------------------------------------------------------------
 // 세션
 // ---------------------------------------------------------------------
+// 기기에 저장된 세션 (서버에 묻지 않음)
+function storedSession() {
+  try { const s = JSON.parse(localStorage.getItem('seojae-auth') || 'null'); return s?.access_token ? s : null; } catch { return null; }
+}
+const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(Object.assign(new Error('timeout'), { timeout: true })), ms))]);
+
+// 오프라인이면 저장된 세션 그대로, 연결이 느리면 3초 뒤 저장된 세션으로 먼저 시작
+//   (만료된 토큰을 갱신하느라 라이브러리가 최대 30초 기다리는 동안 화면이 비지 않게)
 export async function getSession() {
+  if (isOffline()) return storedSession();
   try {
-    const { data } = await supabase.auth.getSession();
+    const { data } = await withTimeout(supabase.auth.getSession(), 3000);
     return data.session ?? null;
   } catch {
-    return null;
+    return storedSession();
   }
 }
 
 // 로그인 직후/앱 시작 시: 프로필 확인 (없으면 pending 으로 생성)
 //   오프라인이면 마지막으로 확인된 프로필로 동작
+//   연결이 느려 2.5초 안에 답이 없으면 마지막 프로필로 먼저 열고(offline), 답은 lateMe() 로 받음
+let late = null;
+export const lateMe = () => late;
+function keepMe(me) {
+  if (me.status === 'blocked') clearPrivateData();
+  else { try { localStorage.setItem(LAST_ME_KEY, JSON.stringify(me)); } catch {} }
+  return me;
+}
 export async function loadMe() {
+  late = null;
+  const last = lastMe();
+  if (isOffline() && last) return { ...last, offline: true };
+  const job = rpc('ensure_profile').then(keepMe);
   try {
-    const me = await rpc('ensure_profile');
-    if (me.status === 'blocked') {
-      clearPrivateData();
-    } else {
-      try { localStorage.setItem(LAST_ME_KEY, JSON.stringify(me)); } catch {}
-    }
-    return me;
+    return await (last ? withTimeout(job, 2500) : job);
   } catch (err) {
-    const last = lastMe();
-    if (last && !navigator.onLine) return { ...last, offline: true };
+    if (err?.timeout && last) { late = job; job.catch(() => {}); return { ...last, offline: true, slow: true }; }
+    if (last && (isOffline() || /Failed to fetch|NetworkError|timeout/i.test(err?.message || ''))) return { ...last, offline: true };
     throw err;
   }
 }

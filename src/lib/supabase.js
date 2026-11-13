@@ -41,7 +41,13 @@ export function errorMessage(err) {
   return '문제가 생겼어요. 잠시 후 다시 시도해 주세요.';
 }
 
+// 오프라인이면 서버를 부르지 않음
+//   (로그인 토큰이 만료된 채 오프라인이면 라이브러리가 토큰 갱신을 최대 30초 다시 시도하느라 모든 요청이 그만큼 멈춤)
+export const isOffline = () => typeof navigator !== 'undefined' && navigator.onLine === false;
+export const offlineError = () => Object.assign(new Error('Failed to fetch (offline)'), { offline: true });
+
 export async function rpc(name, args = {}) {
+  if (isOffline()) throw offlineError();
   const { data, error } = await supabase.rpc(name, args);
   if (error) throw error;
   return data;

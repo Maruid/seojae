@@ -7,7 +7,8 @@ import { errorMessage } from '../lib/supabase.js';
 import { navigate } from '../router.js';
 import { loadNovels, novelById, loadChapters, cachedChapters, fetchChapterText, prefetchChapter, chapterSortDesc, setChapterSortDesc } from '../lib/novels.js';
 import { splitParagraphs, chapterLabel, chapterNo, chapterNoLabel, chapterRest, chapterTitleLine, chapterTotal, findChapterByNo, lastOpened } from '../lib/novelText.js';
-import { loadReading, getReading, saveReading, statusOf, novelReading } from '../lib/progress.js';
+import { loadReading, getReading, saveReading, statusOf, novelReading, isMine } from '../lib/progress.js';
+import { offerOtherDevice, closeOtherDevice, latestRow } from '../components/otherDevice.js';
 import { getView, setView } from '../lib/view.js';
 import { wantAwake } from '../lib/wakeLock.js';
 import { applyReaderTheme, resetReaderTheme, appDark } from '../lib/readerTheme.js';
@@ -196,6 +197,10 @@ export function renderChapter(view, nid, key) {
 
   const goChapter = (c) => c && navigate(`/n/${encodeURIComponent(nid)}/${encodeURIComponent(c.key)}`);
 
+  // 열 때의 가장 최근 기록 (그 뒤 서버에서 더 새 기록이 오면 "다른 기기" 알림)
+  const before = latestRow(novelReading(nid))?.r.updated_at || '';
+  cleanups.push(closeOtherDevice);
+
   (async () => {
     try {
       if (!novel) { await loadNovels(); novel = novelById(nid); }
@@ -220,7 +225,8 @@ export function renderChapter(view, nid, key) {
       document.title = `${chapterTitleLine(ch)} · ${novel.title}`;
       if (panelOpen) setPanel(true);
 
-      const [text] = await Promise.all([fetchChapterText(ch), loadReading().catch(() => null)]);
+      // 본문부터 바로 (읽던 위치는 기기 기록으로, 서버 기록은 뒤에서)
+      const text = await fetchChapterText(ch);
       if (!alive) return;
 
       // 본문: 원본 줄 번호를 위치 기준으로
@@ -315,6 +321,28 @@ export function renderChapter(view, nid, key) {
       if (wasRead) ctrl.setEnded(true);
       chrome.setProgress(ctrl.progress());
       if (resumeAuto) setTimeout(() => { if (alive) ctrl.startAuto(); }, 600);
+
+      // 서버 기록을 받아 보고, 다른 기기에서 더 읽은 위치가 있으면 알림
+      if (navigator.onLine) {
+        loadReading({ maxAge: 15_000 }).then(() => {
+          if (!alive) return;
+          const top = latestRow(novelReading(nid));
+          if (!top || String(top.r.updated_at) <= before || isMine(top.r)) return;
+          const c = chapters.find((x) => x.key === top.k);
+          if (!c) return;
+          const pct = Math.round((top.r.progress || 0) * 100);
+          if (top.k === key) {
+            if (Math.abs((top.r.progress || 0) - ctrl.progress()) < 0.05) return;
+            offerOtherDevice({ text: `다른 기기에서 이 회차를 ${pct}%까지 읽었어요.`, goLabel: '그 위치로', go: () => ctrl.restore(top.r.anchor, top.r.progress) });
+          } else {
+            const label = chapterTitleLine(c);
+            offerOtherDevice({
+              text: top.r.finished_at ? `다른 기기에서 「${label}」까지 다 읽었어요.` : `다른 기기에서 「${label}」 ${pct}%까지 읽었어요.`,
+              goLabel: '그 회차로', go: () => goChapter(c),
+            });
+          }
+        }).catch(() => {});
+      }
     } catch (err) {
       if (!alive) return;
       mount(inner, html`<div style="padding:48px 0;display:flex;flex-direction:column;gap:12px">
