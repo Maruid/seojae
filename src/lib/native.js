@@ -210,6 +210,9 @@ export async function initApp({ supabase, toast, showBar, onResume = null }) {
   try {
     const { App } = await import('@capacitor/app');
     App.addListener('appUrlOpen', ({ url }) => { handleAuthUrl(url, supabase, toast); });
+    // 뒤로가기: 창 닫기 → 위 단계 → 홈 → 한 번 더 누르면 종료 (리스너가 있으면 기본 '기록 되돌리기'는 꺼짐)
+    const { handleBack } = await import('./backNav.js');
+    App.addListener('backButton', () => handleBack({ toast, exitApp: () => App.exitApp() }));
     const launch = await App.getLaunchUrl().catch(() => null);
     if (launch?.url) await handleAuthUrl(launch.url, supabase, toast);
     // 다시 앱으로 돌아올 때마다 업데이트 확인

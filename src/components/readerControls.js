@@ -153,7 +153,7 @@ export function attachReader({
     else if ((k === 'j' || k === 'J') && onKey.next) { e.preventDefault(); onKey.next(); }
     else if ((k === 'k' || k === 'K') && onKey.prev) { e.preventDefault(); onKey.prev(); }
     else if (k === '/' && onKey.search) { e.preventDefault(); onKey.search(); }
-    else if (k === 'Escape' && onKey.back) { onKey.back(); }
+    else if (k === 'Escape' && onKey.back) { if (onKey.back() !== false) e.preventDefault(); }
   };
   document.addEventListener('keydown', key);
 

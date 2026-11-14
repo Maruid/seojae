@@ -85,7 +85,16 @@
     font-size: var(--app-size);
     -webkit-font-smoothing: antialiased;
     -webkit-tap-highlight-color: transparent;
+    /* 한글은 단어(띄어쓰기) 단위로만 줄바꿈, 너무 긴 단어(주소 등)만 예외로 자름 */
+    word-break: keep-all;
+    overflow-wrap: break-word;
   }
+  /* 문단 마지막 줄에 한 단어만 남지 않게, 짧은 안내·제목은 줄 길이를 고르게 */
+  p, li, small, label { text-wrap: pretty; }
+  h1, h2, h3, small.text-xs, span.text-xs, .text-muted { text-wrap: balance; }
+  /* 앱: 안드로이드 기본 스크롤 막대 숨김 (읽기 화면은 회색 막대를 따로 그림) */
+  html.is-app, html.is-app body { scrollbar-width: none; }
+  html.is-app ::-webkit-scrollbar { display: none; }
   button, input, select, textarea { font: inherit; color: inherit; }
   a { color: var(--accent-ink); }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -328,12 +337,24 @@ body:has(.shell[data-immersive]) #toast { bottom: calc(24px + var(--sab)); }
 @media (min-width: 768px) { .ad-stats { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
 .ad-stats > div { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 2px; }
 .ad-stats b { font-size: 20px; }
-.ad-stats b small { font-size: 12px; font-weight: 400; color: var(--muted); }
+.ad-stats b { line-height: 1.2; }
+/* 소설 칸: 편 수 아래에 회차 수 한 줄 (좁은 칸에서 "42 ·" 만 남고 줄이 바뀌던 문제) */
+.ad-stats b small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 .ad-stats span { font-size: 12px; color: var(--muted); }
 .ad-stats .ad-bar { grid-column: span 3; gap: 6px; }
 @media (min-width: 768px) { .ad-stats .ad-bar { grid-column: span 5; } }
 @media (min-width: 1024px) { .ad-stats .ad-bar { grid-column: span 5; } }
-.ad-bar i { display: block; height: 6px; border-radius: 99px; background: var(--chip); overflow: hidden; }
+/* 휴대폰: 숫자 칸 4개는 2×2 아닌 4열, 소설은 아래 넓게 → 빈칸 없음 */
+@media (max-width: 767px) {
+  .ad-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .ad-stats > div { padding: 10px 10px 9px; }
+  .ad-stats span { white-space: nowrap; }
+  .ad-stats > div:nth-child(5) { grid-column: span 4; flex-direction: row; align-items: baseline; gap: 8px; }
+  .ad-stats > div:nth-child(5) b { display: flex; align-items: baseline; gap: 8px; }
+  .ad-stats > div:nth-child(5) span { order: -1; }
+  .ad-stats .ad-bar { grid-column: span 4; }
+}.ad-bar i { display: block; height: 6px; border-radius: 99px; background: var(--chip); overflow: hidden; }
 .ad-bar em { display: block; height: 100%; background: var(--ok); }
 .ad-bar em.is-warn { background: var(--accent); }
 

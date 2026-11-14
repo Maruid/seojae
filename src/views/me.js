@@ -78,7 +78,7 @@ export function renderMe(view, app, { onNameChanged }) {
           <div class="bg-surface border border-line rounded-2xl p-4 flex flex-col gap-4">
             <div class="flex flex-col gap-2.5">
               <span class="font-bold">앱 글꼴</span>
-              <div role="group" aria-label="앱 글꼴" class="flex flex-wrap gap-1.5">
+              <div role="group" aria-label="앱 글꼴" class="grid grid-cols-2 gap-1.5">
                 ${APP_FONTS.map((k) => html`
                   <button type="button" data-action="font" data-v="${k}" aria-pressed="${String(!p.sameAsBody && p.appFont === k)}"
                     class="${chip(!p.sameAsBody && p.appFont === k)} ${p.sameAsBody ? 'opacity-45' : ''}" style="font-family: ${FONTS[k].stack}">${FONTS[k].label}</button>`)}
@@ -91,9 +91,9 @@ export function renderMe(view, app, { onNameChanged }) {
                 <span class="absolute top-[3px] ${p.sameAsBody ? 'left-[23px]' : 'left-[3px]'} w-[22px] h-[22px] rounded-full bg-white shadow"></span>
               </button>
             </div>
-            <div class="flex items-center justify-between">
+            <div class="flex flex-col gap-2.5">
               <span class="font-bold">앱 글자 크기</span>
-              <div role="group" aria-label="앱 글자 크기" class="flex gap-1.5">
+              <div role="group" aria-label="앱 글자 크기" class="grid grid-cols-3 gap-1.5">
                 ${[['small', '작게'], ['normal', '보통'], ['large', '크게']].map(([k, l]) => html`
                   <button type="button" data-action="size" data-v="${k}" aria-pressed="${String(p.appSize === k)}" class="${chip(p.appSize === k)}">${l}</button>`)}
               </div>
@@ -101,8 +101,8 @@ export function renderMe(view, app, { onNameChanged }) {
             <div class="flex flex-col gap-2.5">
               <span class="font-bold">화면 모드</span>
               <div role="group" aria-label="화면 모드" class="grid grid-cols-3 gap-1.5">
-                ${[['light', '밝게'], ['dark', '어둡게'], ['auto', '기기 설정 따름']].map(([k, l]) => html`
-                  <button type="button" data-action="mode" data-v="${k}" aria-pressed="${String(p.mode === k)}" class="${chip(p.mode === k)} !px-1.5 !text-[13px]">${l}</button>`)}
+                ${[['light', '밝게'], ['dark', '어둡게'], ['auto', '기기 설정']].map(([k, l]) => html`
+                  <button type="button" data-action="mode" data-v="${k}" aria-pressed="${String(p.mode === k)}" class="${chip(p.mode === k)} whitespace-nowrap">${l}</button>`)}
               </div>
             </div>
             <span class="text-xs leading-relaxed text-muted">읽기 화면의 글꼴·크기·색은 각 읽기 화면의 "가가" 버튼에서 따로 정해요.</span>

@@ -112,7 +112,7 @@ export function renderDownloads(view, app, ctx) {
                 class="h-9 rounded-[10px] border-0 text-sm cursor-pointer ${tab === k ? 'bg-surface text-ink font-bold shadow-sm' : 'bg-transparent text-muted'}">${l}</button>`)}
           </div>` : ''}
         <p class="dl-qline">${q?.unlimited ? '관리자 · 다운로드 한도 없음'
-          : q ? html`이번 달 남은 한도 <b>${fmtBytes(Math.max(0, (q.limit || 0) - (q.used || 0)))}</b> / ${fmtBytes(q.limit)} · ${resetText(q)}에 다시 채워짐` : '한도 정보를 불러오는 중…'}</p>
+          : q ? html`이번 달 남은 한도 <span class="whitespace-nowrap"><b>${fmtBytes(Math.max(0, (q.limit || 0) - (q.used || 0)))}</b> / ${fmtBytes(q.limit)}</span> · <span class="whitespace-nowrap">${resetText(q)}에 다시 채워짐</span>` : '한도 정보를 불러오는 중…'}</p>
         ${notices.map((x, i) => html`
           <div class="dl-notice" role="status"><span>${x.text}</span><button type="button" data-action="dismiss" data-i="${i}" aria-label="알림 닫기">×</button></div>`)}
         ${!navigator.onLine ? html`<p class="dl-notice">오프라인이라 업데이트를 확인할 수 없어요. 받아 둔 글은 그대로 읽을 수 있어요.</p>` : ''}

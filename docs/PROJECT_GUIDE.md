@@ -306,6 +306,7 @@ seojae\                  (git 저장소) 사이트 코드
 - PWA 설치: Chrome 설치 창 + iPhone은 Safari "홈 화면에 추가" 안내, 새 버전 배너
 
 ### 주소 체계
+- 방문 기록(v2.10.2, `src/lib/backNav.js` · `router.js`): `history.state.i` + sessionStorage `nav:stack` 으로 칸을 셈. 회차↔회차·글↔글·탭↔탭은 바꾸기(replace), 위 단계로 갈 때는 `goUp(path)` = 바로 앞 칸이 그 화면이면 `history.back()`, 아니면 바꾸기. 앱 뒤로가기는 Esc 를 보내 열린 창부터 닫고(창은 Esc 에서 전파를 멈추거나 preventDefault), 아니면 `parentOf()` 위 단계
 `#/` 홈 · `#/columns` · `#/c/<칼럼ID>` · `#/novels` · `#/n/<소설ID>` · `#/n/<소설ID>/<회차키>` · `#/admin` · `#/install`
 
 ### 시안에 반영할 것

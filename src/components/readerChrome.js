@@ -352,6 +352,7 @@ export function createChrome(root, opts) {
     // 자동 재생 창: Enter = 시작 (입력칸이 아닐 때)
     if (autoDialog && e.key === 'Enter') { e.preventDefault(); pop.querySelector('.is-main')?.click(); }
     else if ((autoDialog || seekOpen || infoOpen) && e.key === 'Escape') onKey(e);
+    else if (searching && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeSearch(); }
   };
   root.addEventListener('input', onInput);
   root.addEventListener('change', onChange);

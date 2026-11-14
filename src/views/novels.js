@@ -335,7 +335,8 @@ export function renderNovels(view, query = {}) {
   });
   const onKey = (e) => {
     if (e.key !== 'Escape') return;
-    if (menuFor) { menuFor = null; draw(); } else if (sheet) { sheet = false; draw(); } else if (pick) { pick = null; draw(); }
+    if (menuFor) { menuFor = null; draw(); } else if (sheet) { sheet = false; draw(); } else if (pick) { pick = null; draw(); } else return;
+    e.preventDefault();   // 처리함 (앱 뒤로가기가 화면을 넘기지 않게)
   };
   document.addEventListener('keydown', onKey);
   const jumpers = attachScrollJump(view);

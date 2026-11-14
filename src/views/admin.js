@@ -110,9 +110,9 @@ export function renderAdmin(view, app, { onPendingChange } = {}) {
       <section class="ad-stats" aria-label="사용 현황">
         <div><b>${stats.users_pending}</b><span>승인 대기</span></div>
         <div><b>${stats.users_approved}</b><span>이용 중</span></div>
-        <div><b>${stats.active_7d}</b><span>7일 내 접속</span></div>
+        <div><b>${stats.active_7d}</b><span>7일 접속</span></div>
         <div><b>${stats.columns}</b><span>칼럼</span></div>
-        <div><b>${stats.novels}<small> · ${Number(stats.chapters).toLocaleString()}화</small></b><span>소설</span></div>
+        <div><b>${stats.novels}<small>${Number(stats.chapters).toLocaleString()}화</small></b><span>소설</span></div>
         <div class="ad-bar"><span>DB ${mb(stats.db_size_bytes)} / 500MB</span><i><em style="width:${dbp}%" class="${dbp > 80 ? 'is-warn' : ''}"></em></i></div>
         <div class="ad-bar"><span>파일 ${mb(stats.storage_bytes)} / 1GB</span><i><em style="width:${stp}%" class="${stp > 80 ? 'is-warn' : ''}"></em></i></div>
       </section>`;

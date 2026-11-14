@@ -4,7 +4,7 @@
 //   - 패널 정렬(1화부터 ↔ 최신 회차부터)은 회차 목록 화면과 같은 설정
 import { html, mount, onAction, toast } from '../lib/dom.js';
 import { errorMessage } from '../lib/supabase.js';
-import { navigate } from '../router.js';
+import { navigate, goUp } from '../router.js';
 import { loadNovels, novelById, loadChapters, cachedChapters, fetchChapterText, prefetchChapter, chapterSortDesc, setChapterSortDesc } from '../lib/novels.js';
 import { splitParagraphs, chapterLabel, chapterNo, chapterNoLabel, chapterRest, chapterTitleLine, chapterTotal, findChapterByNo, lastOpened } from '../lib/novelText.js';
 import { loadReading, getReading, saveReading, statusOf, novelReading, isMine } from '../lib/progress.js';
@@ -195,7 +195,8 @@ export function renderChapter(view, nid, key) {
     },
   }));
 
-  const goChapter = (c) => c && navigate(`/n/${encodeURIComponent(nid)}/${encodeURIComponent(c.key)}`);
+  // 회차끼리는 기록을 쌓지 않음 (뒤로가기 = 목록으로)
+  const goChapter = (c) => c && navigate(`/n/${encodeURIComponent(nid)}/${encodeURIComponent(c.key)}`, { replace: true });
 
   // 열 때의 가장 최근 기록 (그 뒤 서버에서 더 새 기록이 오면 "다른 기기" 알림)
   const before = latestRow(novelReading(nid))?.r.updated_at || '';
@@ -290,9 +291,9 @@ export function renderChapter(view, nid, key) {
           endNext: () => goChapter(neighbors.next),
           search: () => chrome.openSearch(),
           back: () => {
-            if (viewSettingsOpen() || chrome.searching) return;
-            if (panelOpen && !wide()) setPanel(false);
-            else if (!wide()) navigate(`/n/${encodeURIComponent(nid)}`);
+            if (viewSettingsOpen() || chrome.searching || wide()) return false;
+            if (panelOpen) setPanel(false);
+            else goUp(`/n/${encodeURIComponent(nid)}`);
           },
         },
       });

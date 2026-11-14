@@ -41,6 +41,14 @@ public class SeojaePlugin extends Plugin {
 
     @Override
     public void load() {
+        // 안드로이드 기본 스크롤 막대 끔 (읽기 화면은 웹이 회색 막대를 따로 그림 → 두 개가 겹쳐 보이던 문제)
+        getActivity().runOnUiThread(() -> {
+            android.webkit.WebView wv = getBridge().getWebView();
+            if (wv != null) {
+                wv.setVerticalScrollBarEnabled(false);
+                wv.setHorizontalScrollBarEnabled(false);
+            }
+        });
         DownloadService.listener = new DownloadService.Listener() {
             @Override
             public void onProgress(JSONObject state) {

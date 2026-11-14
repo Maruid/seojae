@@ -2,6 +2,7 @@ import { supabase, errorMessage, rpc } from './lib/supabase.js';
 import { getSession, loadMe, lateMe, cleanAuthUrl, readAuthError } from './lib/auth.js';
 import { applyPrefs } from './lib/prefs.js';
 import { startRouter, navigate } from './router.js';
+import { installLinkPolicy } from './lib/backNav.js';
 import { toast } from './lib/dom.js';
 import { canAccess } from './lib/nav.js';
 import { renderShell, renderBare } from './components/layout.js';
@@ -208,6 +209,7 @@ async function boot() {
     if (app.route && ['columns', 'column', 'chapter'].includes(app.route.name)) route(app.route);
   });
 
+  installLinkPolicy();   // 회차·글 넘기기·탭 이동은 기록을 쌓지 않음
   startRouter(route);
 }
 

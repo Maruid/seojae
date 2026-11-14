@@ -3,7 +3,7 @@
 //   PC: 왼쪽 목록 + 오른쪽 글
 import { html, mount, onAction, toast } from '../lib/dom.js';
 import { errorMessage } from '../lib/supabase.js';
-import { navigate } from '../router.js';
+import { navigate, goUp } from '../router.js';
 import { loadColumns, cachedColumns, columnById, fetchMd, signImages, fmtDate } from '../lib/columns.js';
 import { loadReading, getReading, saveReading, statusOf, isMine } from '../lib/progress.js';
 import { offerOtherDevice, closeOtherDevice } from '../components/otherDevice.js';
@@ -238,10 +238,10 @@ export function renderColumn(view, app, id) {
         onChrome: (v) => chrome.setVisible(v),
         onAutoChange: (state) => { chrome.setAuto(state); wantAwake('auto', state !== 'off'); },
         onKey: {
-          next: () => neighbors.next && navigate(`/c/${encodeURIComponent(neighbors.next.id)}`),
-          prev: () => neighbors.prev && navigate(`/c/${encodeURIComponent(neighbors.prev.id)}`),
+          next: () => neighbors.next && navigate(`/c/${encodeURIComponent(neighbors.next.id)}`, { replace: true }),
+          prev: () => neighbors.prev && navigate(`/c/${encodeURIComponent(neighbors.prev.id)}`, { replace: true }),
           search: () => chrome.openSearch(),
-          back: () => { if (!viewSettingsOpen() && !chrome.searching && !wide()) navigate('/columns'); },
+          back: () => { if (viewSettingsOpen() || chrome.searching || wide()) return false; goUp('/columns'); },
         },
       });
       cleanups.push(() => ctrl.destroy());
