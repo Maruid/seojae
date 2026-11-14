@@ -43,6 +43,8 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools   # 기본값 'tools' 는 SDK 저장소에서 없어져 실패함
       - name: 안드로이드 SDK
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
