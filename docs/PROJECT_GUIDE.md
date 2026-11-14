@@ -340,3 +340,11 @@ seojae\                  (git 저장소) 사이트 코드
 - 오프라인 표시: `syncOfflineNote(on, reading)` — html.is-offline + 목록 화면 내용 맨 위 `.off-note`, 읽기 화면은 위 바 `.rb-off`, 바뀔 때 토스트
 - 잠금: IndexedDB `kv.lastOnline`. 온라인 확인(ensure_profile 성공) 때마다 갱신, 오프라인 + 30일 초과면 읽기 화면 대신 잠금 안내
 
+### 안드로이드 앱 (v2.9) — 자세한 내용 `docs/APP_GUIDE.md`
+- Capacitor 8, 앱 ID `io.github.maruid.seojae`, 화면 파일은 `dist-app`(`VITE_BASE=/ VITE_APP=1`) — 웹과 같은 코드, 앱 기능은 `src/lib/native.js` 의 `isApp()` 일 때만
+- 앱 쪽 코드: `android/app/src/main/java/io/github/maruid/seojae/` (`MainActivity` 볼륨키, `SeojaePlugin` 볼륨키 켜기·화면 켜짐·`NATIVE_API`)
+- 화면 업데이트: deploy.yml 이 `app/bundle-<커밋>.zip` · `app/version.json` 을 Pages 에 함께 올림 → 앱이 받아 다음 실행 또는 [새로고침] 때 적용. `min_native_api`(app-version.json) > 앱의 `NATIVE_API` 면 앱 업데이트 안내
+- APK: Actions › Android APK (서명 키는 Secrets 에만, `tools/make_keystore.py` 로 만듦)
+- 로그인: 앱은 크롬 탭 → `io.github.maruid.seojae://login?code=…` → `exchangeCodeForSession`
+- 화면 가장자리 여백은 `--sat` · `--sab` 변수로 (앱/웹 공통)
+

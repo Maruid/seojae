@@ -1,6 +1,6 @@
 # 서재 (seojae) 진행 현황 정리
 
-> 2026-11-14 기준 · 웹 v2.8 · upload.py / inspect_novels.py / novel_sources.py 최신 (폴더·EPUB·--meta)
+> 2026-11-14 기준 · 웹 v2.9 · 안드로이드 앱 1단계 · upload.py / inspect_novels.py / novel_sources.py 최신 (폴더·EPUB·--meta)
 > 세부 규칙은 `docs/PROJECT_GUIDE.md`, 설치·배포는 `README.md`를 봅니다. 이 문서는 지금까지 만든 것을 한눈에 보는 요약입니다.
 
 ---
@@ -85,6 +85,12 @@
 - **맨 위 · 맨 아래 바로 가기**: 소설 목록 · 회차 목록. 스크롤하면 나타났다 2초 뒤 사라짐, 회차 목록은 "읽던 회차" 버튼도
 - **표지 크게 보기**: 소설 상세에서 표지를 누르면 화면에 맞춰 크게 (확대·축소 없음). 큰 표지(`cover_large_path`)가 있으면 그것, 없으면 목록용 표지 → 업로더 구현 사양: `docs/COVER_LARGE_SPEC.md`
 - **칼럼 탭**: 분류 칩 줄 → **분류 선택 상자**. 읽기 상태와 정렬은 바깥 한 줄 그대로
+
+### v2.9 안드로이드 앱 (단계 1) — `docs/APP_GUIDE.md`
+- Capacitor 로 웹 화면을 앱에 넣음, 스토어 없이 GitHub Releases 의 `seojae.apk` (Actions › Android APK 로 빌드·서명·올리기)
+- 앱에서만: 볼륨키 넘기기(읽기 화면, 아래 = 다음, 회차 끝에서 한 번 더 → 다음 화, 보기 설정에서 끄기) · 앱 전용 저장 공간 · 화면 켜짐 유지 · 크롬 탭 로그인 · 화면 자동 업데이트(Pages 의 app/version.json) · 앱 업데이트 안내
+- 웹은 그대로 (앱 기능은 앱 안일 때만), 웹의 앱으로 설치 화면에 [안드로이드 앱 받기]
+- 단계 2 예정: 화면이 꺼져도 받기
 
 ### v2.8 오프라인 다운로드
 - 받기: 소설 상세 [회차 받기] · 소설 목록 [여러 편 받기] · 카드 메뉴(길게 누르기 / PC ⋯: 회차 골라 받기 · 다음 50화 바로 받기) · 칼럼 목록·글의 받기
@@ -200,6 +206,7 @@ python upload.py --only meta --meta 소설정보.txt [--dry-run]   # 작가·장
 - [ ] `pip install pillow`
 - [ ] `novel_sources.py` 를 upload.py 옆에 두고 `python inspect_novels.py` 로 폴더·EPUB 점검
 - [ ] `python upload.py --replace "사채왕의 천재손자.txt" --replace "약먹는 천재마법사.txt"` (나누는 방식이 바뀜 → 이 두 편의 읽기 기록은 초기화)
+- [ ] 안드로이드 앱: `python tools/make_keystore.py` → Secrets 4개 등록 → Supabase Redirect URLs 에 `io.github.maruid.seojae://login` → Actions › Android APK 실행 (`docs/APP_GUIDE.md`)
 - [ ] Supabase에서 `migration_008_download_sizes.sql` · `migration_009_downloads.sql` 실행 (다운로드 기능)
 - [ ] 업로더에 파일 크기 칸 채우기 요청 (`docs/DOWNLOAD_SIZE_SPEC.md`)
 - [ ] Supabase 대시보드 Usage 에서 결제 주기 시작일 확인 → 관리 › 다운로드 한도의 초기화 일과 맞추기 (지금 10일)

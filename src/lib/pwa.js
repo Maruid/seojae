@@ -1,5 +1,6 @@
 // PWA: Service Worker 등록 · 새 버전 배너 · 설치 창
 import { html, mount, onAction } from './dom.js';
+import { isApp } from './native.js';
 
 let deferred = null;               // Chrome 설치 창 (beforeinstallprompt)
 const listeners = new Set();
@@ -23,7 +24,8 @@ export function initPwa() {
   window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferred = e; emit(); });
   window.addEventListener('appinstalled', () => { deferred = null; emit(); });
 
-  if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return;
+  // 앱: 화면 파일이 앱 안에 있어서 서비스 워커를 쓰지 않음 (업데이트는 native.js)
+  if (!import.meta.env.PROD || !('serviceWorker' in navigator) || isApp()) return;
   const base = import.meta.env.BASE_URL;
 
   navigator.serviceWorker.register(`${base}sw.js`, { scope: base }).then((reg) => {
@@ -57,6 +59,22 @@ function showUpdate(worker) {
     <button type="button" class="upd-x" data-action="later" aria-label="나중에">나중에</button>`);
   onAction(bar, {
     apply() { applying = true; worker.postMessage({ type: 'SKIP_WAITING' }); bar.remove(); },
+    later() { bar.remove(); },
+  });
+  document.body.appendChild(bar);
+}
+
+// 알림 줄 (앱의 새 버전 · 앱 업데이트 안내에 씀): { text, action, run }
+export function showBar({ text, action, run }) {
+  document.querySelector('.upd-bar')?.remove();
+  const bar = document.createElement('div');
+  bar.className = 'upd-bar';
+  bar.setAttribute('role', 'status');
+  mount(bar, html`<span>${text}</span>
+    <button type="button" data-action="apply">${action}</button>
+    <button type="button" class="upd-x" data-action="later" aria-label="나중에">나중에</button>`);
+  onAction(bar, {
+    apply() { bar.remove(); run(); },
     later() { bar.remove(); },
   });
   document.body.appendChild(bar);

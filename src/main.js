@@ -26,6 +26,8 @@ import { offerResume } from './components/dlFlow.js';
 import { loadNovels, loadChapters } from './lib/novels.js';
 import { loadColumns } from './lib/columns.js';
 import { syncOfflineNote } from './components/layout.js';
+import { initApp, wantVolumeKeys } from './lib/native.js';
+import { showBar } from './lib/pwa.js';
 
 // 앱 전역 상태
 const app = {
@@ -96,6 +98,7 @@ async function route(r) {
   const reading = r.name === 'column' || r.name === 'chapter';
   // 전체 화면은 글·회차를 넘길 때만 유지하고, 목록·홈으로 나가면 풂
   if (!reading) exitFullscreen();
+  wantVolumeKeys(reading);   // 앱: 읽기 화면에서만 볼륨키로 넘기기
   const shellOpts = { immersive: reading, narrowable: ['columns', 'column', 'chapter'].includes(r.name) };
   app.redrawShell = () => renderShell(app, r.name, shellOpts);
   const view = freshView(renderShell(app, r.name, shellOpts));
@@ -148,6 +151,7 @@ async function boot() {
   applyPrefs();
   document.documentElement.style.background = '';   // 첫 화면 깜빡임 방지용 임시 배경 → 이제 CSS 가 맡음
   initPwa();
+  initApp({ supabase, toast, showBar });   // 앱 안에서만 (로그인 복귀 · 볼륨키 · 업데이트)
   // 뒤로 가기 때 브라우저가 스크롤을 멋대로 옮기면 읽던 위치가 잘못 저장됨 → 직접 관리
   if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 

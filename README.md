@@ -86,6 +86,10 @@ insert into public.grants(user_id, sector)
 3. 앱 **관리 › 소설 정보** 에서 소설마다 작가·장르·태그 입력
 4. 안드로이드 설치 앱은 하단 바 색(manifest)이 바뀌었으니 **앱을 지우고 다시 설치**해야 바로 반영됨
 
+## 안드로이드 앱 (APK)
+
+설정 · 빌드 · 설치 순서는 `docs/APP_GUIDE.md`. 요약: `python tools/make_keystore.py` → GitHub Secrets 4개 → Supabase Redirect URLs 에 `io.github.maruid.seojae://login` → Actions › Android APK → 휴대폰에서 `releases/latest/download/seojae.apk`.
+
 ## 콘텐츠 업로드
 
 이 저장소가 아니라 로컬 `seojae-sync` 폴더의 `upload.py` 로 올립니다 (secret key 는 그 폴더 `.env` 에만).
@@ -121,5 +125,6 @@ npm test                     # escape · 라우터 · 권한별 탭 · 본문 �
 - [x] 읽기 화면 v2: 반투명 위·아래 바, 고정, 진행 막대 + % 입력, 정보 팝업, 글 안 검색, 줄 단위 즉시 넘기기, 전체 화면, 글자 두께 / 소설 작가·장르·태그 + 목록 필터 (migration_003)
 - [x] 소설 표지(같은 이름 이미지 → upload.py) + 바둑판형 목록, 장르 여러 개 (migration_004) / 섞인 회차 제목 형식 인식 · 보류 · --force / --split
 - [x] v2.6: 홈 이어 읽기(소설 표지 줄 + 칼럼 5개), 소설 탭 보기 3종 · 검색 · 필터 창 · 바로 가기 · 표지 크게 보기, 칼럼 분류 선택 상자 (migration_006)
+- [x] v2.9: 안드로이드 앱 1단계 (볼륨키 넘기기 · 앱 전용 저장 공간 · 크롬 탭 로그인 · 화면 자동 업데이트, `docs/APP_GUIDE.md`)
 - [x] v2.8: 오프라인 다운로드 (소설·칼럼 받기 창 · 여러 편 · 카드 메뉴 · 다운로드 관리 · 사용자별 월 한도 · 30일 잠금, migration_008·009)
 - [x] v2.7: 장르 18개 목록 고정 · 별칭 · 목록에 없는 장르는 태그로 (migration_007 + 정리 SQL), 관리 편집 장르 고르기 + 자동완성

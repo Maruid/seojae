@@ -2,7 +2,8 @@
 import { supabase, isOffline, offlineError } from './supabase.js';
 import { STORAGE_BUCKET } from '../config.js';
 import { savedChapterText, replaceChapter } from './offline/index.js';
-import { getItem, objectKey, fromViewed } from './offline/store.js';
+import { getItem, objectKey, fromViewed, rememberViewed } from './offline/store.js';
+import { isApp } from './native.js';
 
 const LIST_KEY = 'list:novels';
 const chKey = (id) => `list:novel:${id}`;
@@ -101,6 +102,7 @@ export function fetchChapterText(ch) {
     }
     const text = await data.text();
     if (saved?.stale) replaceChapter(ch, text).catch(() => {});
+    if (isApp()) rememberViewed(objectKey(ch.path), text, 'text/plain; charset=utf-8');
     return text;
   })().then((t) => {
     texts.set(ch.path, t);

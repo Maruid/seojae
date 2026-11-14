@@ -3,7 +3,8 @@
 import { supabase, isOffline, offlineError } from './supabase.js';
 import { STORAGE_BUCKET } from '../config.js';
 import { savedColumnMd, replaceColumnMd, savedImageUrl } from './offline/index.js';
-import { signKey, objectKey, fromViewed } from './offline/store.js';
+import { signKey, objectKey, fromViewed, rememberViewed } from './offline/store.js';
+import { isApp } from './native.js';
 
 const LIST_KEY = 'list:columns';
 const BASE = 'id,title,category,published_at,tags,md_path,links,source_url,author,content_hash,size_bytes';
@@ -68,6 +69,7 @@ export async function fetchMd(col) {
     } else {
       text = await data.text();
       if (saved?.stale) replaceColumnMd(col, text).catch(() => {});
+      if (isApp()) rememberViewed(objectKey(col.md_path), text, 'text/markdown; charset=utf-8');
     }
   }
   mdCache.set(col.id, text);

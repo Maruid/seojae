@@ -26,7 +26,7 @@ export function renderShell(app, routeName, { immersive = false, narrowable = fa
     mount(root, html`
       <div class="shell min-h-dvh lg:flex">
         <nav data-side aria-label="주 메뉴" class="hidden lg:flex lg:flex-col lg:gap-1 lg:shrink-0 lg:sticky lg:top-0 lg:h-dvh lg:px-4 lg:py-6 lg:border-r lg:border-line lg:bg-surface"></nav>
-        <main data-content class="flex-1 min-w-0 pb-[calc(72px+env(safe-area-inset-bottom))] lg:pb-0"></main>
+        <main data-content class="flex-1 min-w-0 pb-[calc(72px+var(--sab))] lg:pb-0"></main>
         <nav data-tabs aria-label="주 메뉴" class="lg:hidden fixed inset-x-0 bottom-0 z-30 bg-surface border-t border-line safe-bottom"></nav>
       </div>`);
     shell = { root, content: root.querySelector('[data-content]'), tabs: root.querySelector('[data-tabs]'), side: root.querySelector('[data-side]') };

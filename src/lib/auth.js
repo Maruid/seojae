@@ -1,6 +1,7 @@
 import { supabase, rpc, isOffline } from './supabase.js';
 import { APP_URL } from '../config.js';
 import { clearOffline } from './offline/store.js';
+import { isApp, appSignIn } from './native.js';
 
 const RETURN_KEY = 'auth:returnTo';
 const LAST_ME_KEY = 'me:last';
@@ -65,6 +66,8 @@ export async function signInWithGoogle() {
     const h = location.hash;
     sessionStorage.setItem(RETURN_KEY, h && h !== '#/login' ? h : '#/');
   } catch {}
+  // 앱: 앱 안에서는 구글이 로그인을 막으므로 크롬 탭으로 열고 앱으로 돌아옴
+  if (isApp()) return appSignIn(supabase);
   const { error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: { redirectTo: APP_URL, queryParams: { prompt: 'select_account' } },

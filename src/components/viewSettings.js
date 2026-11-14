@@ -12,6 +12,7 @@ import { wakeSupported, keepAwakeOn, setKeepAwake } from '../lib/wakeLock.js';
 import { THEMES, DEFAULTS, getView, setView, getMeta, setSeparate, saveMyTheme, clamp, themeColors } from '../lib/view.js';
 import { contrast } from '../lib/color.js';
 import { icon } from './icons.js';
+import { isApp, volumeKeysOn, setVolumeKeysPref } from '../lib/native.js';
 
 const BODY_FONTS = ['system', 'nanumGothic', 'notoSans', 'pretendard', 'gowunDodum', 'notoSerif', 'nanumMyeongjo', 'gowunBatang', 'hahmlet'];
 const SAMPLE = '가나다 Aa 123';
@@ -118,6 +119,7 @@ export function openViewSettings({ scope, appDark, onChange }) {
   const advanced = (v, meta) => html`
     ${fullscreenSupported() ? sw(fullscreenOn(), '읽을 때 전체 화면', 'fullscreen', '', '상태바·하단 바 숨김 · 칼럼·소설 공통') : ''}
     ${wakeSupported() ? sw(keepAwakeOn(), '읽는 동안 화면 켜두기', 'awake', '', '자동 재생 중에는 항상 켜져요 · 칼럼·소설 공통') : ''}
+    ${isApp() ? sw(volumeKeysOn(), '볼륨키로 넘기기', 'volkeys', '', '아래 = 다음 화면 · 위 = 이전 화면 · 회차 끝에서 한 번 더 → 다음 화') : ''}
     <div class="vs-row"><span>정렬</span><div class="vs-seg">
       ${[['left', '왼쪽'], ['justify', '양쪽']].map(([k, l]) => html`<button type="button" class="${chip(v.align === k)}" data-action="set" data-k="align" data-v="${k}" aria-pressed="${String(v.align === k)}">${l}</button>`)}
     </div></div>
@@ -221,6 +223,7 @@ export function openViewSettings({ scope, appDark, onChange }) {
     toggle(b) { const k = b.dataset.k; apply({ [k]: !getView(scope)[k] }); },
     fullscreen() { setFullscreenOn(!fullscreenOn()); draw(); },
     awake() { setKeepAwake(!keepAwakeOn()); draw(); },
+    volkeys() { setVolumeKeysPref(!volumeKeysOn()); draw(); },
     'save-theme'() { saveMyTheme(getView(scope).custom); apply({ theme: 'custom' }); },
     'my-theme'(b) { const t = getMeta().myThemes[+b.dataset.i]; if (t) apply({ custom: { ...t }, theme: 'custom' }); },
     separate() { setSeparate(!getMeta().separate, scope); apply({}); },

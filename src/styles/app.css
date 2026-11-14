@@ -6,6 +6,9 @@
    - 읽기 화면 색은 보기 설정이 따로 덮어씀 (2단계)
 --------------------------------------------------------------------- */
 :root {
+  /* 화면 가장자리 여백: 앱(Capacitor)은 --safe-area-inset-* 를 넣어 주고, 웹은 env() */
+  --sat: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --sab: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
   --bg: #F5F4F0;
   --surface: #FFFFFF;
   --ink: #1B1D21;
@@ -89,10 +92,10 @@
 }
 
 /* 하단 탭바가 iPhone 홈 인디케이터에 가리지 않게 */
-.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+.safe-bottom { padding-bottom: var(--sab); }
 
 #toast {
-  position: fixed; left: 50%; bottom: calc(88px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+  position: fixed; left: 50%; bottom: calc(88px + var(--sab)); transform: translateX(-50%);
   z-index: 50; pointer-events: none;
 }
 #toast > div {
@@ -107,7 +110,7 @@
 .shell[data-immersive] > [data-tabs] { display: none; }
 .shell[data-immersive] > main { padding-bottom: 0; }
 #toast { transition: bottom .2s; }
-body:has(.shell[data-immersive]) #toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
+body:has(.shell[data-immersive]) #toast { bottom: calc(24px + var(--sab)); }
 
 /* 칼럼 PC 2단: 왼쪽 목록은 고정 높이로 따로 스크롤, 오른쪽 글은 문서 스크롤 */
 .col-split { display: block; }
@@ -197,7 +200,7 @@ body:has(.shell[data-immersive]) #toast { bottom: calc(24px + env(safe-area-inse
 .vs-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.28); }
 .vs-panel {
   position: absolute; left: 0; right: 0; bottom: 0; max-height: 82dvh; overflow-y: auto; background: var(--vs-bg);
-  border-radius: 20px 20px 0 0; padding: 4px 18px calc(20px + env(safe-area-inset-bottom)); box-shadow: 0 -10px 40px rgba(0,0,0,.2);
+  border-radius: 20px 20px 0 0; padding: 4px 18px calc(20px + var(--sab)); box-shadow: 0 -10px 40px rgba(0,0,0,.2);
   animation: vs-up .2s ease-out;
 }
 @keyframes vs-up { from { transform: translateY(30px); opacity: .4; } }
@@ -295,7 +298,7 @@ body:has(.shell[data-immersive]) #toast { bottom: calc(24px + env(safe-area-inse
 .nv-panel { display: none; }
 .nv-split[data-panel="open"] .nv-panel {
   display: flex; flex-direction: column; position: fixed; top: 0; right: 0; bottom: 0; width: min(88vw, 380px); z-index: 45;
-  background: var(--r-sheet); color: var(--r-fg); overflow-y: auto; padding: 0 12px calc(16px + env(safe-area-inset-bottom));
+  background: var(--r-sheet); color: var(--r-fg); overflow-y: auto; padding: 0 12px calc(16px + var(--sab));
   box-shadow: -10px 0 40px rgba(0,0,0,.25);
 }
 .nv-split[data-panel="open"]::before { content: ""; position: fixed; inset: 0; z-index: 44; background: rgba(0,0,0,.35); }
@@ -378,7 +381,7 @@ body:has(.shell[data-immersive]) #toast { bottom: calc(24px + env(safe-area-inse
 .cf-btns .is-danger { background: #C0392B; color: #fff; border-color: #C0392B; font-weight: 700; }
 
 /* 새 버전 배너 */
-.upd-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(84px + env(safe-area-inset-bottom)); z-index: 55; display: flex; align-items: center; gap: 12px;
+.upd-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(84px + var(--sab)); z-index: 55; display: flex; align-items: center; gap: 12px;
   background: var(--hero); color: var(--hero-ink); border-radius: 14px; padding: 10px 10px 10px 16px; font-size: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.25); width: max-content; max-width: calc(100vw - 32px); }
 .upd-bar button { height: 36px; padding: 0 14px; border-radius: 10px; border: 0; background: var(--accent); color: #fff; font-weight: 700; cursor: pointer; }
 .upd-bar .upd-x { background: transparent; color: var(--hero-muted); padding: 0 8px; }
@@ -402,7 +405,7 @@ body:has(.shell[data-immersive]) #toast { bottom: calc(24px + env(safe-area-inse
 ===================================================================== */
 .reader-foot {
   position: sticky; bottom: 0; z-index: 20; flex-shrink: 0; display: flex; flex-direction: column; gap: 8px;
-  padding: 10px 14px calc(12px + env(safe-area-inset-bottom));
+  padding: 10px 14px calc(12px + var(--sab));
   background: var(--r-glass, var(--r-bg)); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   border-top: 1px solid var(--r-line); transition: transform .22s ease; font-family: var(--app-font); color: var(--r-fg);
 }
@@ -464,7 +467,7 @@ mark.r-hit.is-cur { background: var(--accent); color: #fff; }
 .reader-bar { gap: 0; padding: 0 4px 0 2px; }
 .rb-title { padding: 0 4px; }
 
-.reader-foot { padding: 8px 10px calc(8px + env(safe-area-inset-bottom)); gap: 0; }
+.reader-foot { padding: 8px 10px calc(8px + var(--sab)); gap: 0; }
 .rf-line { position: absolute; left: 0; right: 0; top: -1px; height: 2px; pointer-events: none; }
 .rf-line i { display: block; height: 100%; background: var(--accent); transition: width .15s; }
 .rf-row { display: flex; align-items: center; gap: 6px; }
@@ -719,7 +722,7 @@ html.is-fs .reader-main { padding-left: max(var(--r-pad), env(safe-area-inset-le
 .nv-sheet-back { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.35); animation: fade-in .15s; }
 .nv-sheet { position: fixed; z-index: 61; left: 0; right: 0; bottom: 0; max-height: min(78dvh, 640px); display: flex; flex-direction: column;
   background: var(--surface); color: var(--ink); border-radius: 20px 20px 0 0; box-shadow: 0 -10px 40px rgba(0,0,0,.25);
-  padding-bottom: env(safe-area-inset-bottom); animation: sheet-up .2s ease-out; }
+  padding-bottom: var(--sab); animation: sheet-up .2s ease-out; }
 @keyframes sheet-up { from { transform: translateY(24px); opacity: 0; } }
 @keyframes fade-in { from { opacity: 0; } }
 @media (min-width: 1024px) { .nv-sheet { left: 50%; right: auto; bottom: auto; top: 12dvh; width: 520px; transform: translateX(-50%); border-radius: 18px; animation: none; } }
@@ -755,7 +758,7 @@ html.is-fs .reader-main { padding-left: max(var(--r-pad), env(safe-area-inset-le
 .nv-lrow-go { flex-shrink: 0; height: 34px; padding: 0 10px; border-radius: 10px; background: var(--chip); color: var(--ink); text-decoration: none; font-size: 12.5px; display: inline-flex; align-items: center; gap: 4px; }
 
 /* 맨 위 · 맨 아래 바로 가기 */
-.sj { position: fixed; z-index: 25; right: 16px; bottom: calc(72px + 16px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 8px; align-items: flex-end;
+.sj { position: fixed; z-index: 25; right: 16px; bottom: calc(72px + 16px + var(--sab)); display: flex; flex-direction: column; gap: 8px; align-items: flex-end;
   opacity: 0; transform: translateY(8px); pointer-events: none; transition: opacity .25s, transform .25s; }
 .sj.is-on { opacity: 1; transform: none; pointer-events: auto; }
 @media (min-width: 1024px) { .sj { right: 28px; bottom: 28px; } }
@@ -768,7 +771,7 @@ html.is-fs .reader-main { padding-left: max(var(--r-pad), env(safe-area-inset-le
 .nv-cover-btn { padding: 0; border: 0; background: transparent; cursor: zoom-in; border-radius: 10px; flex-shrink: 0; }
 .cv-modal { position: fixed; inset: 0; z-index: 80; background: rgba(0,0,0,.88); display: flex; align-items: center; justify-content: center; padding: 56px 16px 24px; animation: fade-in .15s; cursor: zoom-out; }
 .cv-modal img { max-width: 100%; max-height: 100%; border-radius: 10px; box-shadow: 0 20px 60px rgba(0,0,0,.5); object-fit: contain; }
-.cv-x { position: absolute; top: calc(10px + env(safe-area-inset-top)); right: 10px; width: 44px; height: 44px; border-radius: 50%; border: 0; background: rgba(255,255,255,.12); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.cv-x { position: absolute; top: calc(10px + var(--sat)); right: 10px; width: 44px; height: 44px; border-radius: 50%; border: 0; background: rgba(255,255,255,.12); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 
 /* 칼럼 분류 선택 상자 */
 .col-cat { position: relative; display: flex; align-items: center; height: 40px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); }
@@ -880,7 +883,7 @@ html.is-offline .rb-off { display: inline-flex; }
 .nv-hbtn { height: 36px; padding: 0 11px; border-radius: 10px; border: 0; background: var(--chip); color: var(--ink); font: inherit; font-size: 13px; display: inline-flex; align-items: center; gap: 5px; cursor: pointer; white-space: nowrap; }
 .nv-hbtn.is-text { background: transparent; color: var(--accent-ink); }
 @media (max-width: 420px) { .nv-hbtn span { display: none; } }
-.nv-pickbar { position: fixed; z-index: 35; left: 0; right: 0; bottom: calc(72px + env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--line);
+.nv-pickbar { position: fixed; z-index: 35; left: 0; right: 0; bottom: calc(72px + var(--sab)); background: var(--surface); border-top: 1px solid var(--line);
   padding: 10px 16px; display: flex; align-items: center; gap: 12px; box-shadow: 0 -6px 20px rgba(0,0,0,.08); }
 .nv-pickbar span { flex: 1; font-size: 14px; }
 .nv-pickbar small { font-size: 12px; color: var(--muted); }
@@ -975,7 +978,7 @@ html.is-offline .rb-off { display: inline-flex; }
 .dla-in { width: 76px; height: 32px; border: 1px solid var(--line); border-radius: 8px; padding: 0 8px; font: inherit; font-size: 13px; background: var(--bg); color: var(--ink); }
 
 /* 다른 기기에서 읽은 위치 */
-.od-bar { position: fixed; z-index: 75; left: 50%; transform: translateX(-50%); bottom: calc(84px + env(safe-area-inset-bottom)); width: min(calc(100% - 24px), 460px);
+.od-bar { position: fixed; z-index: 75; left: 50%; transform: translateX(-50%); bottom: calc(84px + var(--sab)); width: min(calc(100% - 24px), 460px);
   display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 12px; border-radius: 14px; background: var(--hero); color: var(--hero-ink);
   box-shadow: 0 10px 30px rgba(0,0,0,.25); font-size: 13.5px; animation: sheet-up .2s ease-out; }
 .od-ic { display: inline-flex; color: var(--hero-muted); }

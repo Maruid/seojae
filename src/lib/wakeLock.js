@@ -2,12 +2,15 @@
 //   - 'read': 읽기 화면에 있는 동안 — "읽는 동안 화면 켜두기" 설정이 켜져 있을 때만
 //   - 'auto': 자동 재생 중 — 설정과 상관없이 항상
 //   - 다른 앱에 다녀오면 브라우저가 풀어 버리므로 돌아왔을 때 다시 요청
+import { isApp, setNativeKeepAwake } from './native.js';
+
 const KEY = 'ui:keepAwake';
 const wants = new Set();
 let lock = null;
 let pending = false;
 
-export const wakeSupported = () => typeof navigator !== 'undefined' && 'wakeLock' in navigator;
+export const wakeSupported = () => isApp() || (typeof navigator !== 'undefined' && 'wakeLock' in navigator);
+let nativeOn = null;
 export function keepAwakeOn() { try { return localStorage.getItem(KEY) === '1'; } catch { return false; } }
 export function setKeepAwake(on) {
   try { localStorage.setItem(KEY, on ? '1' : '0'); } catch {}
@@ -17,6 +20,8 @@ export function setKeepAwake(on) {
 const needed = () => wants.has('auto') || (wants.has('read') && keepAwakeOn());
 
 async function sync() {
+  // 앱: 앱 쪽 기능으로 (화면 켜짐 플래그)
+  if (isApp()) { const on = needed(); if (on !== nativeOn) { nativeOn = on; setNativeKeepAwake(on); } return; }
   if (!wakeSupported()) return;
   if (needed()) {
     if (lock || pending || document.visibilityState !== 'visible') return;

@@ -10,3 +10,11 @@ column_backup_data/
 novels_report.json
 novels_map.json
 *.md.bak
+
+# 안드로이드 앱: 빌드 결과 · 서명 키 (키는 GitHub Secrets 에만)
+dist-app/
+*.jks
+*.keystore
+keystore*.txt
+*.p12
+seojae-release.base64.txt

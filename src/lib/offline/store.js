@@ -73,6 +73,17 @@ export async function fromViewed(key) {
   return c.match(key, { ignoreVary: true });
 }
 
+// 앱에는 서비스 워커가 없으므로 열어 본 글을 직접 저장 (웹은 서비스 워커가 함). 400개 넘으면 오래된 것부터
+export async function rememberViewed(key, body, type) {
+  if (typeof caches === 'undefined') return;
+  try {
+    const c = await caches.open(CONTENT_CACHE);
+    await c.put(key, new Response(body, { headers: { 'content-type': type } }));
+    const keys = await c.keys();
+    for (let i = 0; i < keys.length - 400; i++) await c.delete(keys[i]);
+  } catch {}
+}
+
 // ---- 알림 (관리 창에 한 번 보여 줌) ----
 export async function addNotice(text) {
   const list = (await kvGet('notices')) || [];
