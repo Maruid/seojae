@@ -347,4 +347,5 @@ seojae\                  (git 저장소) 사이트 코드
 - APK: Actions › Android APK (서명 키는 Secrets 에만, `tools/make_keystore.py` 로 만듦)
 - 로그인: 앱은 크롬 탭 → `io.github.maruid.seojae://login?code=…` → `exchangeCodeForSession`
 - 화면 가장자리 여백은 `--sat` · `--sab` 변수로 (앱/웹 공통)
+- v2.10(앱 기능 버전 2): `DownloadService`(화면 꺼져도 받기) · `setImmersive`(전체 화면, 설정 `ui:appImmersive`) · 앱 오른쪽 스크롤 막대(`.rd-thumb`, 웹은 `.rd-line` 그대로). 옛 앱(버전 1)은 기존 방식으로 동작
 

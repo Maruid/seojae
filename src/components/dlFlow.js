@@ -5,7 +5,8 @@ import { novelReading, getReading, statusOf, loadReading } from '../lib/progress
 import { continueTarget, chapterTitleLine } from '../lib/novelText.js';
 import { fmtBytes, chapterBytes, columnBytes, presetKeys, roomOf } from '../lib/offline/plan.js';
 import { loadQuota, cachedQuota, quotaMissing, resetText } from '../lib/offline/quota.js';
-import { downloadNovels, downloadColumns, currentJob, onJob, pendingJob, resumeJob, dropJob } from '../lib/offline/engine.js';
+import { downloadNovels, downloadColumns, currentJob, onJob, pendingJob, resumeJob, dropJob, syncNative } from '../lib/offline/engine.js';
+import { nativeDlReady } from '../lib/native.js';
 import { refreshIndex, savedNovelsNow, savedColumnsNow, novelDiff, onCellular } from '../lib/offline/index.js';
 import { objectKey, CONTENT_CACHE } from '../lib/offline/store.js';
 import { openDlSheet } from './dlSheet.js';
@@ -54,12 +55,15 @@ async function preflight(bytes, what) {
 // 진행 창을 띄우고 일 → 결과 안내
 async function withProgress(title, run) {
   let box = null;
-  const off = onJob((j) => { if (j && box) box.update({ done: j.done, total: j.total, sub: `${fmtBytes(j.bytes)} · 앱을 닫으면 멈추고, 다음에 열 때 이어 받아요.` }); });
-  box = progressBox({ title, onCancel: () => currentJob()?.cancel() });
+  const bg = await nativeDlReady();   // 앱 2+: 화면을 꺼도 계속 받음
+  const note = bg ? '화면을 꺼도 계속 받아요. 숨겨도 알림에서 볼 수 있어요.' : '앱을 닫으면 멈추고, 다음에 열 때 이어 받아요.';
+  const off = onJob((j) => { if (j && box) box.update({ done: j.done, total: j.total, sub: `${fmtBytes(j.bytes)} · ${note}` }); });
+  let hidden = false;
+  box = progressBox({ title, onCancel: () => currentJob()?.cancel(), onHide: bg ? () => { hidden = true; off(); box.close(); } : null });
   let r = null;
   try { r = await run(); }
   catch (e) { toast(e?.message === 'BUSY' ? '지금 받는 중이에요.' : '받다가 문제가 생겼어요.'); }
-  finally { off(); box.close(); }
+  finally { if (!hidden) { off(); box.close(); } }
   await refreshIndex();
   if (!r) return r;
   if (r.stopped === 'quota') {
@@ -220,6 +224,7 @@ export async function openColumnDownload(cols, { title = '칼럼 받기', mode =
 // 받다 만 작업 (앱 시작 때)
 // ---------------------------------------------------------------------
 export async function offerResume() {
+  await syncNative().catch(() => {});   // 앱 2+: 앱이 꺼진 동안 받은 것 기록
   const j = await pendingJob().catch(() => null);
   if (!j?.tasks?.length || !navigator.onLine || currentJob()) return;
   const ok = await confirmBox({ title: '받다 만 것이 있어요', body: `${j.label} · 남은 ${j.tasks.length}개를 이어 받을까요? 한도는 실제로 받은 만큼만 세요.`, ok: '이어 받기', cancel: '나중에' });

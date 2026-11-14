@@ -95,12 +95,12 @@
 .safe-bottom { padding-bottom: var(--sab); }
 
 #toast {
-  position: fixed; left: 50%; bottom: calc(88px + var(--sab)); transform: translateX(-50%);
-  z-index: 50; pointer-events: none;
+  position: fixed; left: 0; right: 0; bottom: calc(88px + var(--sab));
+  z-index: 50; pointer-events: none; display: flex; flex-direction: column; align-items: center; padding: 0 16px;
 }
 #toast > div {
-  background: var(--hero); color: var(--hero-ink); border-radius: 12px; padding: 10px 16px; font-size: 14px;
-  box-shadow: 0 8px 24px rgba(0,0,0,.18); margin-top: 8px; max-width: 86vw;
+  background: var(--hero); color: var(--hero-ink); border-radius: 12px; padding: 10px 16px; font-size: 14px; line-height: 1.45;
+  box-shadow: 0 8px 24px rgba(0,0,0,.18); margin-top: 8px; max-width: min(100%, 480px); text-align: center; word-break: keep-all;
 }
 @media (min-width: 1024px) { #toast { bottom: 32px; } }
 
@@ -542,6 +542,12 @@ mark.r-hit.is-cur { background: var(--accent); color: #fff; }
 .rd-line { position: fixed; z-index: 25; left: 0; right: 0; bottom: 0; height: 2px; opacity: 0; transition: opacity .35s; pointer-events: none; }
 .rd-line.is-on { opacity: 1; transition-duration: .1s; }
 .rd-line i { display: block; height: 100%; background: var(--accent); }
+/* 앱: 오른쪽 회색 스크롤 막대 (끌기 없음, 스크롤할 때만 잠깐) */
+.rd-thumb { display: none; }
+html.is-app .rd-line { display: none; }
+html.is-app .rd-thumb { display: block; position: fixed; z-index: 25; right: 2px; top: calc(var(--sat) + 4px); bottom: calc(var(--sab) + 4px); width: 3px; opacity: 0; transition: opacity .35s; pointer-events: none; }
+html.is-app .rd-thumb.is-on { opacity: 1; transition-duration: .1s; }
+html.is-app .rd-thumb i { display: block; width: 100%; border-radius: 3px; background: color-mix(in srgb, var(--r-fg, var(--ink)) 32%, transparent); }
 
 /* 회차 번호 칸 */
 .nv-row-n { flex-shrink: 0; min-width: 4.4em; font-size: 13px; color: var(--r-muted, var(--muted)); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -985,3 +991,16 @@ html.is-offline .rb-off { display: inline-flex; }
 .od-t { flex: 1; min-width: 0; line-height: 1.4; }
 .od-go { height: 34px; padding: 0 12px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; }
 .od-x { width: 32px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: var(--hero-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+
+/* =====================================================================
+   안드로이드 앱: 상태 바(시간·배터리) 자리를 비우고 그 아래부터 화면
+   (앱은 화면이 상태 바 뒤까지 그려지므로, Capacitor 가 알려 주는 --safe-area-inset-top 만큼 내림)
+===================================================================== */
+html.is-app body { padding-top: var(--sat); }
+html.is-app body::before { content: ''; position: fixed; z-index: 40; top: 0; left: 0; right: 0; height: var(--sat); background: var(--bg); pointer-events: none; }
+html.is-app .sticky.top-0 { top: var(--sat); }
+html.is-app .rd-notch { display: block; position: fixed; z-index: 50; top: 0; left: 0; right: 0; height: var(--sat); background: var(--r-bg, var(--bg)); pointer-events: none; }
+html.is-app .reader-bar { top: var(--sat); }
+html.is-app .reader-bar[data-hidden] { transform: translateY(calc(-100% - var(--sat))); }
+html.is-app .nv-split[data-panel="open"] .nv-panel { padding-top: var(--sat); }
+html.is-app .nv-sheet { max-height: calc(100dvh - var(--sat) - 16px); }

@@ -47,7 +47,7 @@ export function infoBox({ title, body, ok = '확인' }) {
 }
 
 // 진행 창: update({ done, total, label, sub }) / close()
-export function progressBox({ title, onCancel }) {
+export function progressBox({ title, onCancel, onHide = null }) {
   let st = { done: 0, total: 0, sub: '' };
   const m = open(html`<div class="cf-back"></div><div class="cf-box" role="dialog" aria-modal="true" aria-label="${title}" data-pbox></div>`);
   const box = m.root.querySelector('[data-pbox]');
@@ -57,9 +57,9 @@ export function progressBox({ title, onCancel }) {
       <div class="flex items-center gap-2"><strong class="flex-1">${title}</strong><span class="text-[13px] text-muted">${st.done} / ${st.total}</span></div>
       <div class="dl-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div>
       <p>${st.sub}</p>
-      <div class="cf-btns"><button type="button" data-action="cancel">취소</button></div>`);
+      <div class="cf-btns">${onHide ? html`<button type="button" data-action="hide">숨기기</button>` : ''}<button type="button" data-action="cancel">취소</button></div>`);
   };
-  const off = onAction(m.root, { cancel: () => onCancel?.() });
+  const off = onAction(m.root, { cancel: () => onCancel?.(), hide: () => onHide?.() });
   draw();
   return {
     update(x) { st = { ...st, ...x }; draw(); },

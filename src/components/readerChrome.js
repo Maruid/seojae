@@ -9,6 +9,7 @@
 //               잠깐 멈춤 상태에서는 아래에 [− 속도 +] [이어서] 알약
 import { html, mount, onAction } from '../lib/dom.js';
 import { icon } from './icons.js';
+import { isApp, rehideBars } from '../lib/native.js';
 
 const PIN_KEY = 'ui:barPin';
 export function barPinned() {
@@ -187,7 +188,8 @@ export function createChrome(root, opts) {
           <button type="button" class="is-main" data-action="au-resume">${icon('play', 15)}이어서</button>
         </div>` : ''}
       <span class="rd-notch" aria-hidden="true"></span>
-      <span class="rd-line" aria-hidden="true"><i data-hline style="width:${pct * 100}%"></i></span>`);
+      <span class="rd-line" aria-hidden="true"><i data-hline style="width:${pct * 100}%"></i></span>
+      <span class="rd-thumb" aria-hidden="true"><i data-thumb></i></span>`);
   };
 
   const apply = () => {
@@ -402,8 +404,25 @@ export function createChrome(root, opts) {
       const b = foot.querySelector('.rf-pct');
       if (b) b.textContent = pv;
     },
-    // 바가 숨어 있을 때 화면 맨 아래 진행선을 잠깐 보여 줌
+    // 웹: 바가 숨어 있을 때 화면 맨 아래 진행선을 잠깐 보여 줌
+    // 앱: 오른쪽에 회색 스크롤 막대 (높이 = 보이는 양 / 글 길이, 위치 = 진행률). 바와 상관없이 스크롤할 때 보였다 1초 뒤 사라짐
     flashLine() {
+      if (isApp()) {
+        rehideBars();
+        const tr = pop.querySelector('.rd-thumb');
+        const th = tr?.querySelector('[data-thumb]');
+        if (!th) return;
+        const H = tr.clientHeight;
+        const doc = document.documentElement.scrollHeight;
+        if (!H || doc <= window.innerHeight + 4) return;
+        const h = Math.max(24, Math.round(H * Math.min(1, window.innerHeight / doc)));
+        th.style.height = `${h}px`;
+        th.style.transform = `translateY(${Math.round((H - h) * pct)}px)`;
+        tr.classList.add('is-on');
+        clearTimeout(lineTimer);
+        lineTimer = setTimeout(() => tr.classList.remove('is-on'), 1000);
+        return;
+      }
       if (!foot.hasAttribute('data-hidden')) return;
       const el = pop.querySelector('.rd-line');
       if (!el) return;
@@ -413,7 +432,11 @@ export function createChrome(root, opts) {
     },
     setTitle(small, title) { opts.small = small; opts.title = title; if (!searching) drawTop(); },
     setNav(prev, next) { opts.prev = prev; opts.next = next; drawFoot(); },
-    setAuto(state) { autoState = state; if (!searching) drawTop(); drawPop(); },
+    setAuto(state) {
+      autoState = state;
+      if (state === 'run') { clearTimeout(lineTimer); pop.querySelector('.rd-thumb')?.classList.remove('is-on'); }
+      if (!searching) drawTop(); drawPop();
+    },
     refreshInfo() { if (infoOpen) drawPop(); },
     openSearch,
     closeSearch,

@@ -14,7 +14,14 @@
 | 화면 자동 업데이트 | 웹을 배포하면 앱이 다음에 열릴 때 새 화면 묶음을 받아 "새 버전이 있어요 [새로고침]" (APK 다시 설치 불필요) |
 | 앱 업데이트 안내 | 새 화면이 더 새 앱 기능을 필요로 하면 "앱을 업데이트해 주세요 [받기]" |
 
-단계 2(예정): 화면이 꺼져도 받기(안드로이드 쪽 받기 + 알림).
+### 단계 2 (v2.10 · 앱 기능 버전 2, APK 1.0.3~)
+| 기능 | 내용 |
+|---|---|
+| 화면이 꺼져도 받기 | 받기를 앱의 받기 서비스(`DownloadService`, 알림 표시)가 함. 진행 창 [숨기기] → 알림에서 진행·취소. 파일은 앱 저장 공간 `files/dl/` |
+| 읽을 때 전체 화면 | 보기 설정 › 고급 (앱에서만, 기본 끔). 읽기 화면에서 시계·배터리 줄과 제스처 바를 숨김. 가장자리에서 쓸면 잠깐 보였다 저절로 들어감. 카메라 구멍 자리는 읽기 화면 색 띠로 남김 |
+| 오른쪽 스크롤 막대 | 앱에서만 아래 주황 진행선 대신. 회색, 높이 = 보이는 양/글 길이, 위치 = 진행률. 스크롤할 때 보였다 1초 뒤 사라짐. 끌기 없음, 자동 재생 중엔 안 보임. 바가 보일 때 아래 바 위 테두리 진행선은 그대로 |
+
+옛 앱(기능 버전 1)은 새 화면을 받아도 예전처럼: 받기는 화면이 켜져 있을 때만, 전체 화면은 기본 기능으로 숨기고 넘길 때 다시 숨김.
 
 ## 2. 처음 한 번 설정
 ### 2-1. 서명 키 만들기 (내 PC)
@@ -66,6 +73,9 @@ io.github.maruid.seojae://login
 ## 6. 구조 (개발 참고)
 - `capacitor.config.json` — 앱 ID `io.github.maruid.seojae`, 화면 파일 `dist-app`(`npm run build:app`, `VITE_BASE=/ VITE_APP=1`)
 - `android/` — Capacitor 안드로이드 프로젝트. `MainActivity`(볼륨키), `SeojaePlugin`(볼륨키 켜기 · 화면 켜짐 · 기능 버전), 딥링크 intent-filter, 서명은 환경 변수
+- `DownloadService` — 포그라운드 서비스(dataSync). `.job.json`(이름·서명 주소·한도) 을 읽어 3개씩 받고 `.results.jsonl` 에 결과를 남김. 한도(`limit` 바이트)에 닿으면 멈춤
+- 웹 쪽 받기(`offline/engine.js` `runNative`): 열어 본 글은 여기서 옮겨 담고, 나머지는 하루짜리 서명 주소로 넘김. 결과는 진행 중·끝·앱 다시 열 때(`syncNative`) 가져와 기록 + 한도에 더함. 끊긴 것은 kv `nativeJob` → `job`(이어 받기)
+- 파일 이름 = 주소 키 SHA-256 앞 40자 + 확장자, 읽을 때 `Capacitor.convertFileSrc` (`offline/store.js`, 없으면 Cache API 로)
 - `src/lib/native.js` — 웹 쪽 앱 기능 (`isApp()` 일 때만): 로그인 복귀, 볼륨키 → PageDown/PageUp, 화면 묶음 업데이트(`@capgo/capacitor-updater`, 자동 업데이트·통계 끔), 앱 업데이트 안내
 - 화면 묶음: Pages 배포 때 `dist/app/bundle-<커밋>.zip` + `dist/app/version.json` 을 함께 올림 (deploy.yml)
 - 앱에는 서비스 워커가 없음 → 열어 본 글은 `rememberViewed()` 가 직접 저장

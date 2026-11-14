@@ -352,10 +352,16 @@ export function renderNovels(view, query = {}) {
     } catch (err) { error = errorMessage(err); if (!list) draw(); else toast(error); }
   };
   const offSaved = onSaved(() => { if (view.isConnected) draw(); });
+  const onNet = () => { if (view.isConnected) { if (!navigator.onLine) { pick = null; menuFor = null; } draw(); } };
+  window.addEventListener('online', onNet);
+  window.addEventListener('offline', onNet);
   refreshIndex().catch(() => {});
   draw();
   refresh();
-  return () => { clearTimeout(qt); clearTimeout(lp); offSaved(); document.removeEventListener('keydown', onKey); jumpers.destroy(); };
+  return () => {
+    clearTimeout(qt); clearTimeout(lp); offSaved(); document.removeEventListener('keydown', onKey); jumpers.destroy();
+    window.removeEventListener('online', onNet); window.removeEventListener('offline', onNet);
+  };
 }
 
 // ---------------------------------------------------------------------
@@ -479,6 +485,9 @@ export function renderNovel(view, id) {
     async dl() { if (novel) { await openNovelDownload([novel]); if (view.isConnected) draw(); } },
   });
   const offSaved = onSaved(() => { if (view.isConnected && chapters) draw(); });
+  const onNet = () => { if (view.isConnected && chapters) draw(); };
+  window.addEventListener('online', onNet);
+  window.addEventListener('offline', onNet);
   refreshIndex().catch(() => {});
   const jumpers = attachScrollJump(view);
   const syncJump = () => {
@@ -506,7 +515,7 @@ export function renderNovel(view, id) {
       if (!scrolled) { scrolled = true; requestAnimationFrame(jump); }
     } catch (err) { error = errorMessage(err); if (!chapters) draw(); else toast(error); }
   })();
-  return () => { jumpers.destroy(); closeCover(); offSaved(); };
+  return () => { jumpers.destroy(); closeCover(); offSaved(); window.removeEventListener('online', onNet); window.removeEventListener('offline', onNet); };
 }
 
 // ---------------------------------------------------------------------

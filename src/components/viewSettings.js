@@ -12,7 +12,7 @@ import { wakeSupported, keepAwakeOn, setKeepAwake } from '../lib/wakeLock.js';
 import { THEMES, DEFAULTS, getView, setView, getMeta, setSeparate, saveMyTheme, clamp, themeColors } from '../lib/view.js';
 import { contrast } from '../lib/color.js';
 import { icon } from './icons.js';
-import { isApp, volumeKeysOn, setVolumeKeysPref } from '../lib/native.js';
+import { isApp, volumeKeysOn, setVolumeKeysPref, appImmersiveOn, setAppImmersivePref } from '../lib/native.js';
 
 const BODY_FONTS = ['system', 'nanumGothic', 'notoSans', 'pretendard', 'gowunDodum', 'notoSerif', 'nanumMyeongjo', 'gowunBatang', 'hahmlet'];
 const SAMPLE = '가나다 Aa 123';
@@ -118,6 +118,7 @@ export function openViewSettings({ scope, appDark, onChange }) {
 
   const advanced = (v, meta) => html`
     ${fullscreenSupported() ? sw(fullscreenOn(), '읽을 때 전체 화면', 'fullscreen', '', '상태바·하단 바 숨김 · 칼럼·소설 공통') : ''}
+    ${isApp() ? sw(appImmersiveOn(), '읽을 때 전체 화면', 'appimm', '', '시계·배터리 줄과 아래 제스처 바를 숨겨요 · 가장자리에서 쓸면 잠깐 보였다 들어가요') : ''}
     ${wakeSupported() ? sw(keepAwakeOn(), '읽는 동안 화면 켜두기', 'awake', '', '자동 재생 중에는 항상 켜져요 · 칼럼·소설 공통') : ''}
     ${isApp() ? sw(volumeKeysOn(), '볼륨키로 넘기기', 'volkeys', '', '아래 = 다음 화면 · 위 = 이전 화면 · 회차 끝에서 한 번 더 → 다음 화') : ''}
     <div class="vs-row"><span>정렬</span><div class="vs-seg">
@@ -224,6 +225,7 @@ export function openViewSettings({ scope, appDark, onChange }) {
     fullscreen() { setFullscreenOn(!fullscreenOn()); draw(); },
     awake() { setKeepAwake(!keepAwakeOn()); draw(); },
     volkeys() { setVolumeKeysPref(!volumeKeysOn()); draw(); },
+    appimm() { setAppImmersivePref(!appImmersiveOn()); draw(); },
     'save-theme'() { saveMyTheme(getView(scope).custom); apply({ theme: 'custom' }); },
     'my-theme'(b) { const t = getMeta().myThemes[+b.dataset.i]; if (t) apply({ custom: { ...t }, theme: 'custom' }); },
     separate() { setSeparate(!getMeta().separate, scope); apply({}); },

@@ -147,6 +147,9 @@ function createPane() {
 
   onReadingChange(() => { if (el.isConnected) p.draw(); });
   onSaved(() => { if (el.isConnected) p.draw(); });
+  const onNet = () => { if (el.isConnected) p.draw(); };
+  window.addEventListener('online', onNet);
+  window.addEventListener('offline', onNet);
   refreshIndex().catch(() => {});
 
   p.refresh = async () => {

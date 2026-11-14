@@ -6,7 +6,9 @@
 const KEY = 'ui:fullscreen';
 const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
-export const fullscreenSupported = () => !!document.documentElement.requestFullscreen && document.fullscreenEnabled !== false && !isIOS();
+import { isApp } from './native.js';
+
+export const fullscreenSupported = () => !isApp() && !!document.documentElement.requestFullscreen && document.fullscreenEnabled !== false && !isIOS();
 export function fullscreenOn() { try { return localStorage.getItem(KEY) === '1'; } catch { return false; } }
 export function setFullscreenOn(on) {
   try { localStorage.setItem(KEY, on ? '1' : '0'); } catch {}

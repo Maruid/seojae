@@ -6,6 +6,7 @@
 //       kv:    lastOnline(마지막 온라인 확인) · job(받다 만 작업) · notices(알림)
 //   - 로그아웃·차단 시 둘 다 지움 (clearOffline)
 import { SUPABASE_URL, STORAGE_BUCKET } from '../../config.js';
+import { nativeDlReady, nativeDl, fileSrc } from '../native.js';
 
 export const DL_CACHE = 'seojae-content-dl';
 export const CONTENT_CACHE = 'seojae-content';
@@ -57,15 +58,57 @@ export const itemsOfNovel = (novelId) => tx('items', 'readonly', (s) => req(s.in
 export const kvGet = (k) => tx('kv', 'readonly', (s) => req(s.get(k))).then((r) => r?.v).catch(() => undefined);
 export const kvSet = (k, v) => tx('kv', 'readwrite', (s) => { if (v === undefined) s.delete(k); else s.put({ k, v }); }).catch(() => {});
 
+// ---- 앱 2+: 화면이 꺼져도 받은 파일은 앱 저장 공간(files/dl/<이름>)에 ----
+//   이름 = 주소 키의 SHA-256 앞 40자 + 확장자 (앱·웹이 같은 규칙으로 계산)
+const native = { ready: null, dir: '', names: new Set() };
+export function initNativeFiles() {
+  if (!native.ready) {
+    native.ready = (async () => {
+      if (!(await nativeDlReady())) return false;
+      try {
+        native.dir = (await nativeDl.info()).dir;
+        native.names = new Set((await nativeDl.list()).names || []);
+        return true;
+      } catch { return false; }
+    })();
+  }
+  return native.ready;
+}
+export async function nativeName(key) {
+  const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key));
+  const hex = [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 40);
+  const ext = (new URL(key).pathname.match(/\.(txt|md|webp|jpe?g|png|gif)$/i) || [''])[0].toLowerCase();
+  return hex + ext;
+}
+export const noteNativeFile = (name) => native.names.add(name);
+async function nativeFile(key) {
+  if (!(await initNativeFiles())) return null;
+  const name = await nativeName(key);
+  if (!native.names.has(name)) return null;
+  try { const r = await fetch(fileSrc(`${native.dir}/${name}`)); return r.ok ? r : null; } catch { return null; }
+}
+
 // ---- 파일 ----
 export async function dlCache() { return caches.open(DL_CACHE); }
 export async function putFile(key, body, type) {
   const c = await dlCache();
   await c.put(key, new Response(body, { headers: { 'content-type': type || 'application/octet-stream' } }));
 }
-export async function hasFile(key) { return !!(await (await dlCache()).match(key, { ignoreVary: true })); }
-export async function getFile(key) { return (await dlCache()).match(key, { ignoreVary: true }); }
-export async function deleteFiles(keys) { const c = await dlCache(); await Promise.all(keys.map((k) => c.delete(k))); }
+export async function hasFile(key) {
+  if ((await initNativeFiles()) && native.names.has(await nativeName(key))) return true;
+  return !!(await (await dlCache()).match(key, { ignoreVary: true }));
+}
+export async function getFile(key) {
+  return (await nativeFile(key)) || (await dlCache()).match(key, { ignoreVary: true });
+}
+export async function deleteFiles(keys) {
+  const c = await dlCache();
+  await Promise.all(keys.map((k) => c.delete(k)));
+  if (await initNativeFiles()) {
+    const names = (await Promise.all(keys.map(nativeName))).filter((n) => native.names.has(n));
+    if (names.length) { names.forEach((n) => native.names.delete(n)); await nativeDl.remove(names).catch(() => {}); }
+  }
+}
 // 열어 본 글 저장 공간에 이미 있는 것 (옮겨 담으면 서버에서 받지 않아도 됨 → 한도 안 씀)
 export async function fromViewed(key) {
   if (typeof caches === 'undefined') return null;
@@ -103,6 +146,7 @@ export const lastOnline = () => kvGet('lastOnline');
 // ---- 모두 지우기 (로그아웃·차단) ----
 export async function clearOffline() {
   try { if (typeof caches !== 'undefined') await caches.delete(DL_CACHE); } catch {}
+  try { if (await nativeDlReady()) { await nativeDl.clear(); native.names.clear(); } } catch {}
   try {
     if (dbp) { (await dbp).close(); dbp = null; }
     await new Promise((resolve) => { const r = indexedDB.deleteDatabase(DB_NAME); r.onsuccess = r.onerror = r.onblocked = () => resolve(); });

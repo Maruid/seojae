@@ -159,7 +159,10 @@ export function renderDownloads(view, app, ctx) {
     },
   });
 
-  const offs = [onSaved(() => { if (view.isConnected) draw(); }), onQuota(() => { if (view.isConnected) draw(); }), onJob(() => { if (!currentJob() && view.isConnected) draw(); })];
+  const onNet = () => { if (view.isConnected) draw(); };
+  window.addEventListener('online', onNet);
+  window.addEventListener('offline', onNet);
+  const offs = [() => { window.removeEventListener('online', onNet); window.removeEventListener('offline', onNet); }, onSaved(() => { if (view.isConnected) draw(); }), onQuota(() => { if (view.isConnected) draw(); }), onJob(() => { if (!currentJob() && view.isConnected) draw(); })];
   draw();
   (async () => {
     notices = await takeNotices();

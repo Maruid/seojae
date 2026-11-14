@@ -8,7 +8,8 @@ import { supabase } from '../supabase.js';
 import { SUPABASE_KEY, STORAGE_BUCKET } from '../../config.js';
 import { imagePath } from '../md.js';
 import { wantAwake } from '../wakeLock.js';
-import { objectKey, signKey, putFile, getItem, putItems, deleteFiles, fromViewed, hasFile, kvSet, kvGet } from './store.js';
+import { objectKey, signKey, putFile, getItem, putItems, deleteFiles, getFile, fromViewed, hasFile, kvSet, kvGet, initNativeFiles, nativeName, noteNativeFile } from './store.js';
+import { nativeDl } from '../native.js';
 import { addUsage, cachedQuota, room } from './quota.js';
 
 const FLUSH = 1048576;
@@ -40,10 +41,10 @@ async function fetchRetry(url, init, tries = 3) {
   throw last;
 }
 
-async function signMany(paths) {
+async function signMany(paths, ttl = 3600) {
   const out = {};
   for (let i = 0; i < paths.length; i += 100) {
-    const { data, error } = await supabase.storage.from(STORAGE_BUCKET).createSignedUrls(paths.slice(i, i + 100), 3600);
+    const { data, error } = await supabase.storage.from(STORAGE_BUCKET).createSignedUrls(paths.slice(i, i + 100), ttl);
     if (error) throw error;
     for (const d of data || []) if (d.signedUrl) out[d.path] = d.signedUrl;
   }
@@ -55,8 +56,9 @@ async function signMany(paths) {
  *   tasks: [{ id, kind: 'object' | 'signed', path, fresh?: true(바뀐 것: 열어 본 저장본 안 씀), type?, after?(res) → 기록 }]
  *   label: 진행 창에 보일 이름
  */
-async function runTasks(tasks, label, { resumeKey = null } = {}) {
+async function runTasks(tasks, label, { resumeKey = null, js = false } = {}) {
   if (running) throw new Error('BUSY');
+  if (!js && (await initNativeFiles())) return runNative(tasks, label);
   const job = { label, done: 0, total: tasks.length, bytes: 0, net: 0, stopped: null, failed: 0, cancelled: false };
   job.cancel = () => { job.cancelled = true; };
   running = job; emit();
@@ -205,14 +207,14 @@ export async function downloadColumns(plans, label) {
       images: old?.images || [], imagesDone: textOnly ? [] : old?.imagesDone || [], imgBytes: textOnly ? 0 : old?.imgBytes || 0, savedAt: old?.savedAt || now }]);
     mdTasks.push({ kind: 'object', path: col.md_path, colId: col.id, part: 'md', hash: col.content_hash || null, fresh: !!old && old.hash !== (col.content_hash || null), type: 'text/markdown; charset=utf-8' });
   }
-  const r1 = await runTasks(withAfter(mdTasks), label, { resumeKey: false });
+  const r1 = await runTasks(withAfter(mdTasks), label, { resumeKey: false, js: true });
   if (r1.cancelled || r1.stopped) return r1;
   // 이미지
   const imgTasks = [];
   for (const { col, textOnly } of plans) {
     const rec = await getItem(`col:${col.id}`);
     if (!rec) continue;
-    const md = await (await (await caches.open('seojae-content-dl')).match(objectKey(col.md_path)))?.text();
+    const md = await (await getFile(objectKey(col.md_path)))?.text();
     const imgs = imagesInMd(md);
     rec.images = imgs;
     await putItems([rec]);
@@ -233,4 +235,150 @@ export async function resumeJob() {
   const j = await kvGet('job');
   if (!j?.tasks?.length) return null;
   return runTasks(withAfter(j.tasks), j.label);
+}
+
+// ---------------------------------------------------------------------
+// 앱 2+: 화면이 꺼져도 받기 (앱의 받기 서비스가 받고, 웹은 결과만 기록)
+//   1) 열어 본 글 저장 공간에 있는 것은 여기서 옮겨 담음 (한도 안 씀)
+//   2) 나머지는 하루짜리 서명 주소로 바꿔 앱에 넘김 → 앱 저장 공간 files/dl/ 에 저장
+//   3) 받은 결과(.results.jsonl)는 진행 중·끝·앱 다시 열 때 가져와 기록하고 한도에 더함
+//   남은 할 일은 kv 'nativeJob' 에 → 끊기면(앱이 꺼짐 등) 'job' 으로 옮겨 다음에 이어 받기
+// ---------------------------------------------------------------------
+const strip = ({ after, ...r }) => r;
+let nativeEnd = null;   // 지금 작업이 끝날 때 부를 함수
+let nativeHooked = false;
+let taking = Promise.resolve();
+
+function hookNative() {
+  if (nativeHooked) return;
+  nativeHooked = true;
+  nativeDl.on('dlProgress', (st) => {
+    if (!running?.native) return;
+    running.done = running.base + (st.done || 0);
+    running.failed = st.failed || 0;
+    running.bytes = running.baseBytes + (st.bytes || 0);
+    emit();
+    if ((st.done || 0) % 20 === 0) takeNative().catch(() => {});
+  }).catch(() => {});
+  nativeDl.on('dlEnd', (st) => { const f = nativeEnd; nativeEnd = null; f ? f(st) : syncNative().catch(() => {}); }).catch(() => {});
+}
+
+// 받은 결과를 가져와 기록 (한 번에 하나씩)
+function takeNative() {
+  taking = taking.then(async () => {
+    const nj = await kvGet('nativeJob');
+    const { items = [] } = await nativeDl.take();
+    if (!nj || !items.length) return { ok: 0, failed: 0, bytes: 0 };
+    const byName = new Map(nj.tasks.map((t) => [t.name, t]));
+    let bytes = 0, ok = 0, failed = 0;
+    for (const it of items) {
+      const t = byName.get(it.name);
+      if (!t) continue;
+      if (!it.ok) { failed++; continue; }
+      noteNativeFile(it.name);
+      byName.delete(it.name);
+      bytes += it.size || 0; ok++;
+      const [one] = withAfter([{ ...t }]);
+      try { if (one.after) await one.after({ size: it.size || 0, key: t.fileKey }); } catch {}
+    }
+    nj.tasks = [...byName.values()];
+    await kvSet('nativeJob', nj);
+    if (bytes) { try { await addUsage(bytes); } catch {} }
+    return { ok, failed, bytes };
+  });
+  return taking;
+}
+
+// 끝난 작업 정리: 남은 것은 끊긴 경우에만 이어 받기로
+async function closeNative(st) {
+  await takeNative().catch(() => {});
+  const nj = await kvGet('nativeJob');
+  await kvSet('nativeJob', undefined);
+  const rest = (nj?.tasks || []).map(({ name, url, fileKey, ...t }) => t);
+  const keep = rest.length && !st?.cancelled && st?.stopped !== 'quota' && st?.stopped !== 'auth';
+  if (keep) {
+    const old = await kvGet('job');
+    await kvSet('job', { label: nj.label, tasks: [...(old?.tasks || []), ...rest], at: Date.now() });
+  }
+  return rest.length;
+}
+
+async function runNative(tasks, label) {
+  hookNative();
+  const job = { native: true, label, done: 0, total: tasks.length, bytes: 0, net: 0, stopped: null, failed: 0, cancelled: false, base: 0, baseBytes: 0 };
+  job.cancel = () => { job.cancelled = true; nativeDl.cancel().catch(() => {}); };
+  running = job; emit();
+  await kvSet('job', undefined);
+  const remote = [];
+  try {
+    // 1) 열어 본 것·이미 있는 것
+    for (const t of tasks) {
+      if (job.cancelled) break;
+      const key = t.kind === 'signed' ? signKey(t.path) : objectKey(t.path);
+      let body = null;
+      if (!t.fresh) {
+        const hit = await fromViewed(key).catch(() => null);
+        if (hit) body = await hit.blob();
+        else if (t.kind === 'signed' && await hasFile(key)) body = 'skip';
+      }
+      if (!body) { remote.push({ t, key }); continue; }
+      let size = 0;
+      if (body !== 'skip') { size = body.size; await putFile(key, body, t.type || body.type || TEXT); }
+      job.bytes += size;
+      if (t.after) await t.after({ size, key });
+      job.done++; emit();
+    }
+    if (job.cancelled || !remote.length) return { ...job, rest: remote.length };
+
+    // 2) 서명 주소 (하루짜리) → 앱에 넘김
+    let urls = {};
+    try { urls = await signMany([...new Set(remote.map((r) => r.t.path))], 86400); }
+    catch { job.stopped = 'auth'; return { ...job, rest: remote.length }; }
+    const list = [];
+    for (const { t, key } of remote) {
+      const url = urls[t.path];
+      if (!url) { job.failed++; continue; }
+      list.push({ ...strip(t), name: await nativeName(key), url, fileKey: key });
+    }
+    if (!list.length) return { ...job, rest: 0 };
+    const q = cachedQuota();
+    const limit = q && !q.unlimited ? Math.max(0, room()) : -1;
+    await kvSet('nativeJob', { label, tasks: list, at: Date.now() });
+    job.base = job.done; job.baseBytes = job.bytes;
+    const ended = new Promise((res) => { nativeEnd = res; });
+    try { await nativeDl.start({ label, limit, tasks: list.map(({ name, url }) => ({ name, url })) }); }
+    catch (e) { nativeEnd = null; await kvSet('nativeJob', undefined); throw new Error(String(e?.message || e).includes('BUSY') ? 'BUSY' : 'START'); }
+    if (job.cancelled) nativeDl.cancel().catch(() => {});
+    const st = await ended;
+    const r = await closeNative(st);
+    job.done = job.base + (st.done || 0);
+    job.failed += st.failed || 0;
+    job.bytes = job.baseBytes + (st.bytes || 0);
+    job.net = st.bytes || 0;
+    job.stopped = st.stopped || job.stopped;
+    job.cancelled = job.cancelled || !!st.cancelled;
+    return { ...job, rest: r };
+  } finally {
+    running = null; emit();
+  }
+}
+
+// 앱을 열 때·돌아올 때: 앱이 꺼진 동안 받은 것 기록, 아직 받는 중이면 진행 상황에 다시 붙음
+export async function syncNative() {
+  if (!(await initNativeFiles())) return;
+  hookNative();
+  if (running) return;
+  const st = await nativeDl.status().catch(() => null);
+  const nj = await kvGet('nativeJob');
+  if (!nj) { if (!st?.running) await nativeDl.take().catch(() => {}); return; }
+  if (st?.running) {
+    const job = { native: true, label: nj.label, done: st.done || 0, total: st.total || nj.tasks.length, bytes: st.bytes || 0, net: 0, stopped: null, failed: st.failed || 0, cancelled: false, base: 0, baseBytes: 0, attached: true };
+    job.cancel = () => { job.cancelled = true; nativeDl.cancel().catch(() => {}); };
+    running = job; emit();
+    nativeEnd = async (end) => { await closeNative(end); running = null; emit(); };
+    return;
+  }
+  // 앱이 꺼진 사이 끝났거나 끊김 → 정리 (상태를 모르면 끊긴 것으로 보고 이어 받기로 남김)
+  await closeNative(st && st.total ? st : null);
+  emit();
 }

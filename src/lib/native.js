@@ -5,7 +5,7 @@
 //   - 화면 켜짐 유지: 앱 쪽 기능으로
 //   - 웹 화면 업데이트: GitHub Pages 의 app/version.json 을 보고 새 묶음을 받아 "새로고침" 때 적용
 //   - 앱 업데이트 안내: 새 웹 화면이 필요로 하는 앱 기능 버전(min_native_api)보다 앱이 낮으면 APK 받기 안내
-import { registerPlugin } from '@capacitor/core';
+import { registerPlugin, SystemBars, Capacitor } from '@capacitor/core';
 
 export const APP_SCHEME = 'io.github.maruid.seojae';
 export const APP_LOGIN_URL = `${APP_SCHEME}://login`;
@@ -42,6 +42,65 @@ function applyVolumeKeys() {
   if (!isApp()) return;
   plugin().setVolumeKeys({ on: volWanted && volumeKeysOn() }).catch(() => {});
 }
+
+// ---- 전체 화면 (앱, 읽기 화면에서만, 기본 끔) ----
+//   앱 2(API 2)+: 상태 바·제스처 바를 숨기고, 가장자리에서 쓸면 잠깐 보였다 저절로 들어감
+//   옛 앱(API 1): 기본 기능으로 숨기고, 쓸어 꺼낸 바는 넘기거나 스크롤할 때 다시 숨김
+const IMM_KEY = 'ui:appImmersive';
+export const appImmersiveOn = () => { try { return localStorage.getItem(IMM_KEY) === '1'; } catch { return false; } };
+let immWanted = false;
+let immOn = null;
+export function setAppImmersivePref(on) {
+  try { localStorage.setItem(IMM_KEY, on ? '1' : '0'); } catch {}
+  applyImmersive(true);
+}
+export function wantImmersive(reading) { immWanted = reading; applyImmersive(); }
+async function applyImmersive(force = false) {
+  if (!isApp()) return;
+  const on = immWanted && appImmersiveOn();
+  if (on === immOn && !force) return;
+  immOn = on;
+  // 바를 숨겨도 카메라 구멍 띠는 그대로: 숨기기 전 상태 바 높이를 붙잡아 둠 (읽기 화면 색 띠)
+  const root = document.documentElement;
+  if (on) {
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;visibility:hidden;height:var(--sat)';
+    document.body.append(probe);
+    const h = probe.getBoundingClientRect().height;
+    probe.remove();
+    if (h > 0) root.style.setProperty('--sat', `${h}px`);
+    root.classList.add('is-imm');
+  } else {
+    root.style.removeProperty('--sat');
+    root.classList.remove('is-imm');
+  }
+  if ((await nativeApiLevel()) >= 2) { plugin().setImmersive({ on }).catch(() => {}); return; }
+  (on ? SystemBars.hide({}) : SystemBars.show({})).catch(() => {});
+}
+// 옛 앱: 쓸어서 꺼낸 바를 넘길 때 다시 숨김 (읽기 화면이 스크롤·넘길 때 부름)
+let rehideAt = 0;
+export function rehideBars() {
+  if (!isApp() || !immOn || nativeApi == null || nativeApi >= 2) return;
+  const now = Date.now();
+  if (now - rehideAt < 1500) return;
+  rehideAt = now;
+  SystemBars.hide({}).catch(() => {});
+}
+
+// ---- 화면이 꺼져도 받기 (앱 2+) ----
+export async function nativeDlReady() { return isApp() && (await nativeApiLevel()) >= 2; }
+export const nativeDl = {
+  info: () => plugin().dlInfo(),
+  list: () => plugin().dlList(),
+  start: (o) => plugin().dlStart(o),
+  status: () => plugin().dlStatus(),
+  take: () => plugin().dlTakeResults(),
+  cancel: () => plugin().dlCancel(),
+  remove: (names) => plugin().dlDelete({ names }),
+  clear: () => plugin().dlClear(),
+  on: (ev, fn) => plugin().addListener(ev, fn),
+};
+export const fileSrc = (absPath) => Capacitor.convertFileSrc(`file://${absPath}`);
 
 // ---- 화면 켜짐 유지 ----
 export function setNativeKeepAwake(on) {
@@ -113,10 +172,31 @@ export async function openExternal(url) {
   try { const { Browser } = await import('@capacitor/browser'); await Browser.open({ url }); } catch { location.href = url; }
 }
 
+// ---- 상태 바 글자색: 화면 배경이 밝으면 어두운 글자, 어두우면 밝은 글자 ----
+//   html 배경(앱 화면 모드 · 읽기 화면 테마)이 바뀔 때마다 맞춤
+let barStyle = null;
+function syncBarStyle() {
+  const m = getComputedStyle(document.documentElement).backgroundColor.match(/\d+(\.\d+)?/g);
+  if (!m) return;
+  const [r, g, b] = m.map(Number);
+  const style = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 < 0.5 ? 'DARK' : 'LIGHT';
+  if (style === barStyle) return;
+  barStyle = style;
+  SystemBars.setStyle({ style }).catch(() => {});
+}
+function watchBarStyle() {
+  let t = null;
+  const later = () => { clearTimeout(t); t = setTimeout(syncBarStyle, 30); };
+  new MutationObserver(later).observe(document.documentElement, { attributes: true, attributeFilter: ['style', 'class', 'data-theme'] });
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', later);
+  syncBarStyle();
+}
+
 // ---- 앱 시작 때 (main.js boot) ----
-export async function initApp({ supabase, toast, showBar }) {
+export async function initApp({ supabase, toast, showBar, onResume = null }) {
   if (!isApp()) return;
   document.documentElement.classList.add('is-app');
+  watchBarStyle();
   // 새 묶음이 제대로 열렸다고 알림 (안 하면 15초 뒤 예전 묶음으로 되돌림)
   import('@capgo/capacitor-updater').then(({ CapacitorUpdater }) => CapacitorUpdater.notifyAppReady()).catch(() => {});
 
@@ -133,7 +213,7 @@ export async function initApp({ supabase, toast, showBar }) {
     const launch = await App.getLaunchUrl().catch(() => null);
     if (launch?.url) await handleAuthUrl(launch.url, supabase, toast);
     // 다시 앱으로 돌아올 때마다 업데이트 확인
-    App.addListener('resume', () => checkBundle({ showBar }));
+    App.addListener('resume', () => { checkBundle({ showBar }); onResume?.(); if (immOn) applyImmersive(true); });
   } catch {}
   setTimeout(() => checkBundle({ showBar }), 4000);
 }
