@@ -10,7 +10,15 @@ const GB = 1024 * MB;
 const MODE = { admin: ['관리자', 'is-ink'], auto: ['자동', ''], stopped: ['자동 · 쓴 만큼에서 멈춤', ''], direct: ['직접', ''], blocked: ['차단', 'is-mute'], pending: ['승인 대기', 'is-acc'] };
 const kst = (iso) => new Intl.DateTimeFormat('ko-KR', { month: 'numeric', day: 'numeric', timeZone: 'Asia/Seoul' }).format(new Date(iso));
 
+// 사용자 정렬: 이름 순 / 남은 양 순, 같은 버튼을 다시 누르면 방향이 바뀜 (기기별 기억)
+const SORT_KEY = 'ui:dlaSort';
+const loadSort = () => { try { const v = JSON.parse(localStorage.getItem(SORT_KEY)); if (v && ['name', 'left'].includes(v.key)) return v; } catch {} return { key: 'name', dir: 1 }; };
+const nameOf = (r) => r.display_name || r.email || '이름 없음';
+const leftOf = (r) => Math.max(0, (r.limit_bytes || 0) - (r.used_bytes || 0));
+const GROUP = { admin: 0, auto: 1, stopped: 1, direct: 1, pending: 2, blocked: 3 };
+
 export function createDlAdmin(redraw) {
+  let sort = loadSort();
   let settings = null;
   let rows = null;
   let error = null;
@@ -28,9 +36,57 @@ export function createDlAdmin(redraw) {
     redraw();
   }
 
+  // 관리자 → 승인된 사람 → 승인 대기 → 차단, 각 무리 안에서 고른 순서
+  function sorted() {
+    const cmp = sort.key === 'left'
+      ? (a, b) => (leftOf(a) - leftOf(b)) || nameOf(a).localeCompare(nameOf(b), 'ko')
+      : (a, b) => nameOf(a).localeCompare(nameOf(b), 'ko');
+    return [...rows].sort((a, b) => ((GROUP[a.mode] ?? 1) - (GROUP[b.mode] ?? 1)) || cmp(a, b) * sort.dir);
+  }
+  const sortBtns = () => {
+    const b = (key, label, up, down) => {
+      const on = sort.key === key;
+      return html`<button type="button" class="dla-sort ${on ? 'is-on' : ''}" data-dla-sort="${key}" aria-pressed="${on}">${label}${on ? html` <span aria-hidden="true">${sort.dir === 1 ? up : down}</span>` : ''}</button>`;
+    };
+    return html`<div class="dla-sorts" role="group" aria-label="정렬">${b('name', '이름 순', '가→하', '하→가')}${b('left', '남은 양 순', '적은 순', '많은 순')}</div>`;
+  };
+
+  // 휴대폰·태블릿: 한 사람당 카드 하나 (옆으로 넘기지 않음)
+  const limitCtl = (r, name) => html`
+    <select class="dla-sel" data-dla-mode data-id="${r.user_id}" aria-label="${name} 한도 방식">
+      <option value="auto" ${r.override_bytes == null ? 'selected' : ''}>자동</option>
+      <option value="direct" ${r.override_bytes != null ? 'selected' : ''}>직접</option></select>
+    ${r.override_bytes != null ? html`
+      <form data-dla-limit data-id="${r.user_id}" class="dla-lim-f">
+        <input name="mb" inputmode="numeric" value="${Math.round(r.override_bytes / MB)}" aria-label="${name} 한도 MB" class="dla-in"> MB
+        <button type="submit" class="dla-b">저장</button></form>`
+      : html`<span class="dla-u-auto">${fmtBytes(r.limit_bytes || 0)}${r.mode === 'stopped' ? html` <small class="text-muted">쓴 만큼에서 멈춤</small>` : ''}</span>`}`;
+  const card = (r) => {
+    const [label, cls] = MODE[r.mode] || [r.mode, ''];
+    const name = nameOf(r);
+    if (r.mode === 'admin') {
+      return html`<li class="dla-u"><div class="dla-u-top"><b>${name}</b><span class="dla-st is-ink">관리자</span>
+        <span class="dla-u-left text-muted">한도 없음</span></div>
+        <p class="dla-u-sub">이번 기간 ${fmtBytes(r.used_bytes)} · 세지 않음</p></li>`;
+    }
+    if (r.mode === 'blocked' || r.mode === 'pending') {
+      return html`<li class="dla-u is-dim"><div class="dla-u-top"><b>${name}</b><span class="dla-st ${cls}">${label}</span></div>
+        <p class="dla-u-sub">${r.used_bytes ? `${fmtBytes(r.used_bytes)} 사용 · 인원에서 빠짐, 쓴 양은 나눌 양에서 계속 뺌` : r.mode === 'pending' ? '승인되면 인원에 들어가고 모두 다시 계산' : '인원에서 빠짐'}</p></li>`;
+    }
+    const lim = r.limit_bytes || 0;
+    const pct = lim ? Math.min(100, (r.used_bytes / lim) * 100) : 100;
+    const left = leftOf(r);
+    return html`<li class="dla-u">
+      <div class="dla-u-top"><b>${name}</b><span class="dla-st is-ok">승인</span>${r.approved_at ? html`<small class="text-muted">${kst(r.approved_at)}</small>` : ''}
+        <span class="dla-u-left">남음 <b class="${left === 0 ? 'text-accent-ink' : ''}">${fmtBytes(left)}</b></span></div>
+      <div class="dla-u-bar"><span class="dl-bar is-sm"><i style="width:${pct}%" class="${pct >= 100 ? 'is-over' : ''}"></i></span>
+        <small>${fmtBytes(r.used_bytes)} / ${fmtBytes(lim)}</small></div>
+      <div class="dla-u-lim"><span class="text-muted">한도</span>${limitCtl(r, name)}</div></li>`;
+  };
+
   const row = (r) => {
     const [label, cls] = MODE[r.mode] || [r.mode, ''];
-    const name = r.display_name || r.email || '이름 없음';
+    const name = nameOf(r);
     if (r.mode === 'admin') {
       return html`<tr><td><b>${name}</b></td><td><span class="dla-st is-ink">관리자</span></td><td>—</td><td>한도 없음</td><td>${fmtBytes(r.used_bytes)}</td><td class="text-muted text-xs">세지 않음</td><td>—</td></tr>`;
     }
@@ -64,6 +120,7 @@ export function createDlAdmin(redraw) {
     if (!settings || !rows) return html`<p class="text-sm text-muted">${error || '불러오는 중…'}</p>`;
     const s = settings;
     const pct = s.pool ? Math.round((s.used / s.pool) * 100) : 0;
+    const list = sorted();
     return html`
       <div class="flex flex-wrap gap-4">
         <form class="dla-card flex-[1_1_380px]" data-dla-settings aria-labelledby="dla-s">
@@ -87,11 +144,13 @@ export function createDlAdmin(redraw) {
         </section>
       </div>
       <section class="dla-card" aria-labelledby="dla-u">
-        <h2 id="dla-u">사용자별 한도</h2>
-        <div class="overflow-x-auto">
+        <div class="dla-u-head"><h2 id="dla-u">사용자별 한도</h2>${sortBtns()}</div>
+        <p class="dla-u-sum">인원 <b>${s.members}명</b> · 이번 기간 <b>${fmtBytes(s.used)}</b> / ${fmtBytes(s.pool)}</p>
+        <ul class="dla-us">${list.map(card)}</ul>
+        <div class="dla-t-wrap">
           <table class="dla-t">
             <thead><tr><th>사용자</th><th>상태</th><th>한도 방식</th><th>한도</th><th>이번 기간 사용</th><th></th><th>남음</th></tr></thead>
-            <tbody>${rows.map(row)}</tbody>
+            <tbody>${list.map(row)}</tbody>
           </table>
         </div>
       </section>`;
@@ -129,5 +188,14 @@ export function createDlAdmin(redraw) {
     else save(() => rpc('dl_admin_set_override', { p_user: r.user_id, p_bytes: r.limit_bytes || 0 }), '직접 한도로 바꿨어요. 숫자를 고쳐 저장하세요.');
   }
 
-  return { load, render, onSubmit, onChange, get loaded() { return !!settings || missing; } };
+  function onClick(e) {
+    const b = e.target.closest('[data-dla-sort]');
+    if (!b) return;
+    const key = b.dataset.dlaSort;
+    sort = sort.key === key ? { key, dir: -sort.dir } : { key, dir: 1 };
+    try { localStorage.setItem(SORT_KEY, JSON.stringify(sort)); } catch {}
+    redraw();
+  }
+
+  return { load, render, onSubmit, onChange, onClick, get loaded() { return !!settings || missing; } };
 }

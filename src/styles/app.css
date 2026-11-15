@@ -93,6 +93,9 @@
   p, li, small, label { text-wrap: pretty; }
   h1, h2, h3, small.text-xs, span.text-xs, .text-muted { text-wrap: balance; }
   /* 앱: 안드로이드 기본 스크롤 막대 숨김 (읽기 화면은 회색 막대를 따로 그림) */
+  /* 어떤 화면이든 내용이 넘쳐도 페이지가 옆으로 밀리지 않게 (아래 탭이 같이 밀려 잘리던 문제) */
+  html, body { overflow-x: clip; }
+  input, select, textarea { min-width: 0; max-width: 100%; }
   html.is-app, html.is-app body { scrollbar-width: none; }
   html.is-app ::-webkit-scrollbar { display: none; }
   button, input, select, textarea { font: inherit; color: inherit; }
@@ -988,11 +991,38 @@ html.is-offline .rb-off { display: inline-flex; }
 /* 관리자 › 다운로드 한도 */
 .dla-card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .dla-card h2 { margin: 0; font-size: 15.5px; }
-.dla-fld { flex: 1 1 150px; display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--muted); }
-.dla-fld input, .dla-fld select { height: 42px; border: 1px solid var(--line); border-radius: 10px; padding: 0 12px; font: inherit; font-size: 15px; color: var(--ink); background: var(--bg); }
+.dla-fld { flex: 1 1 150px; min-width: 0; display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--muted); }
+/* 입력칸은 칸 폭에 맞춤 (휴대폰 크롬이 기본 폭으로 카드 밖까지 늘리던 문제) */
+.dla-fld input, .dla-fld select { width: 100%; min-width: 0; box-sizing: border-box; height: 42px; border: 1px solid var(--line); border-radius: 10px; padding: 0 12px; font: inherit; font-size: 15px; color: var(--ink); background: var(--bg); }
 .dla-note { margin: 0; background: var(--bg); border-radius: 12px; padding: 10px 12px; font-size: 13px; line-height: 1.65; }
 .dla-b { height: 34px; padding: 0 12px; border-radius: 9px; border: 1px solid var(--line); background: transparent; color: var(--ink); font: inherit; font-size: 13px; cursor: pointer; }
 .dla-b.is-main { height: 42px; padding: 0 18px; background: var(--ink); color: var(--bg); border-color: var(--ink); font-weight: 700; }
+/* 사용자별 한도: 1024px 미만은 카드 목록, 이상은 표 */
+.dla-u-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.dla-sorts { display: inline-flex; gap: 4px; padding: 3px; border-radius: 10px; background: var(--bg); }
+.dla-sort { height: 30px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font: inherit; font-size: 12.5px; white-space: nowrap; cursor: pointer; }
+.dla-sort.is-on { background: var(--surface); color: var(--ink); font-weight: 700; box-shadow: 0 1px 2px rgba(0,0,0,.15); }
+.dla-sort span { font-weight: 500; color: var(--muted); font-size: 11.5px; }
+.dla-u-sum { margin: -4px 0 0; font-size: 12.5px; color: var(--muted); }
+.dla-u-sum b { color: var(--ink); }
+.dla-us { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.dla-u { padding: 12px 0; border-top: 1px solid var(--line-soft); display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.dla-u:first-child { border-top: 0; padding-top: 4px; }
+.dla-u.is-dim { opacity: .7; }
+.dla-u-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.dla-u-top > b { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.dla-u-top small { font-size: 11.5px; white-space: nowrap; }
+.dla-u-left { margin-left: auto; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.dla-u-left b { font-size: 14px; color: var(--ink); }
+.dla-u-sub { margin: 0; font-size: 12.5px; color: var(--muted); }
+.dla-u-bar { display: flex; align-items: center; gap: 10px; }
+.dla-u-bar .dl-bar { flex: 1; min-width: 0; }
+.dla-u-bar small { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.dla-u-lim { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.dla-lim-f { display: flex; align-items: center; gap: 4px; }
+.dla-u-auto { font-size: 13px; }
+.dla-t-wrap { display: none; }
+@media (min-width: 1024px) { .dla-us, .dla-u-sum { display: none; } .dla-t-wrap { display: block; overflow-x: auto; } }
 .dla-t { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 14px; }
 .dla-t th { text-align: left; font-size: 12.5px; color: var(--muted); font-weight: 500; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .dla-t td { padding: 10px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }

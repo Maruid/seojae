@@ -253,6 +253,7 @@ export function renderAdmin(view, app, { onPendingChange } = {}) {
   view.addEventListener('input', (e) => nv.onInput(e, view));
   view.addEventListener('submit', (e) => { if (tab === 'downloads') dla.onSubmit(e); else nv.onSubmit(e, view); });
   view.addEventListener('change', (e) => { if (tab === 'downloads') dla.onChange(e); });
+  view.addEventListener('click', (e) => { if (tab === 'downloads') dla.onClick(e); });
 
   draw();
   load();
