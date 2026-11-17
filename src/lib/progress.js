@@ -12,9 +12,24 @@ const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } ca
 export const keyOf = (kind, id) => `${kind}:${id}`;
 
 let state = read(CACHE);          // key → row
-// 이 기기에서 쓴 기록 표시 (다른 기기에서 읽은 위치와 구분)
-const mine = new Set(Object.values(read(OUTBOX)).map((r) => r.updated_at));
-export const isMine = (row) => !!row && mine.has(row.updated_at);
+
+// 이 기기 ID (앱/브라우저마다 한 번 만들어 계속 씀, 로그아웃해도 유지)
+//   기록마다 device_id 로 같이 저장 → "다른 기기에서 읽은 위치"를 이 값으로만 구분
+const DEVICE_KEY = 'seojae:device';
+export const DEVICE_ID = (() => {
+  try {
+    let id = localStorage.getItem(DEVICE_KEY);
+    if (!id) {
+      id = crypto.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+      localStorage.setItem(DEVICE_KEY, id);
+    }
+    return id;
+  } catch { return 'unknown'; }
+})();
+// 다른 기기가 쓴 기록인지 (기기 표시가 없는 예전 기록은 알 수 없으니 아니라고 봄)
+export const isOtherDevice = (row) => !!row?.device_id && row.device_id !== DEVICE_ID;
+// 시각 비교용 (기기 시각 '...Z' 와 서버 시각 '...+00:00' 형식이 섞여 있어 문자열로 비교하지 않음)
+export const ts = (v) => (v ? Date.parse(v) || 0 : 0);
 let loadedAt = 0;
 const listeners = new Set();
 export const onReadingChange = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
@@ -50,7 +65,7 @@ export async function loadReading({ force = false, maxAge = 60_000 } = {}) {
   for (let from = 0; ; from += 1000) {
     const { data: part, error } = await supabase
       .from('reading_state')
-      .select('item_kind,item_id,novel_id,anchor,progress,finished_at,updated_at')
+      .select('item_kind,item_id,novel_id,anchor,progress,finished_at,updated_at,device_id')
       .order('item_kind').order('item_id')
       .range(from, from + 999);
     if (error) { if (!navigator.onLine) return state; throw error; }
@@ -75,8 +90,7 @@ export async function loadReading({ force = false, maxAge = 60_000 } = {}) {
 export function saveReading(kind, id, patch) {
   const k = keyOf(kind, id);
   const prev = state[k] || { item_kind: kind, item_id: id, anchor: null, progress: 0, finished_at: null };
-  const row = { ...prev, ...patch, item_kind: kind, item_id: id, updated_at: new Date().toISOString() };
-  mine.add(row.updated_at);
+  const row = { ...prev, ...patch, item_kind: kind, item_id: id, updated_at: new Date().toISOString(), device_id: DEVICE_ID };
   if (patch.finished_at === true) row.finished_at = prev.finished_at || row.updated_at;
   if (typeof row.progress === 'number') row.progress = Math.max(0, Math.min(1, Math.round(row.progress * 1000) / 1000));
   state = { ...state, [k]: row };
@@ -108,6 +122,7 @@ export async function flushReading() {
     const payload = rows.map((r) => ({
       user_id: uid, item_kind: r.item_kind, item_id: r.item_id, novel_id: r.novel_id ?? null,
       anchor: r.anchor ?? null, progress: r.progress ?? 0, finished_at: r.finished_at ?? null, updated_at: r.updated_at,
+      device_id: r.device_id ?? DEVICE_ID,
     }));
     const { error } = await supabase.from('reading_state').upsert(payload, { onConflict: 'user_id,item_kind,item_id' });
     if (error) { scheduleFlush(30_000); return; }

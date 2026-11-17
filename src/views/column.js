@@ -5,7 +5,7 @@ import { html, mount, onAction, toast } from '../lib/dom.js';
 import { errorMessage } from '../lib/supabase.js';
 import { navigate, goUp } from '../router.js';
 import { loadColumns, cachedColumns, columnById, fetchMd, signImages, fmtDate } from '../lib/columns.js';
-import { loadReading, getReading, saveReading, statusOf, isMine } from '../lib/progress.js';
+import { loadReading, getReading, saveReading, statusOf, isOtherDevice, ts } from '../lib/progress.js';
 import { offerOtherDevice, closeOtherDevice } from '../components/otherDevice.js';
 import { getView, setView } from '../lib/view.js';
 import { wantAwake } from '../lib/wakeLock.js';
@@ -186,7 +186,7 @@ export function renderColumn(view, app, id) {
       chrome.setNav(navOf(neighbors.prev), navOf(neighbors.next));
       document.title = `${col.title} · 서재`;
       // 본문부터 바로 (읽던 위치는 기기 기록으로, 서버 기록은 뒤에서)
-      const before = getReading('column', id)?.updated_at || '';
+      const before = ts(getReading('column', id)?.updated_at);
       cleanups.push(closeOtherDevice);
       const md = await fetchMd(col);
       if (!alive) return;
@@ -282,7 +282,7 @@ export function renderColumn(view, app, id) {
         loadReading({ maxAge: 15_000 }).then(() => {
           if (!alive) return;
           const t = getReading('column', id);
-          if (!t || String(t.updated_at) <= before || isMine(t) || t.finished_at) return;
+          if (!t || ts(t.updated_at) <= before || !isOtherDevice(t) || t.finished_at) return;
           if (Math.abs((t.progress || 0) - ctrl.progress()) < 0.05) return;
           offerOtherDevice({ text: `다른 기기에서 이 글을 ${Math.round((t.progress || 0) * 100)}%까지 읽었어요.`, goLabel: '그 위치로', go: () => ctrl.restore(t.anchor, t.progress) });
         }).catch(() => {});

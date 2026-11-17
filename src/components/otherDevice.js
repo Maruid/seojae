@@ -26,10 +26,3 @@ export function offerOtherDevice({ text, go, goLabel = '이동' }) {
   document.body.appendChild(el);
   timer = setTimeout(closeOtherDevice, 12000);
 }
-
-// 기록 묶음에서 가장 최근 (updated_at)
-export function latestRow(rows) {
-  let best = null;
-  for (const [k, r] of Object.entries(rows || {})) if (r && (!best || String(r.updated_at) > String(best.r.updated_at))) best = { k, r };
-  return best;
-}

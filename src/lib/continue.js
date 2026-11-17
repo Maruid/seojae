@@ -4,7 +4,7 @@
 //   - 다음 회차가 없으면(마지막 화까지 다 읽음) done → 홈에서 뺌. 새 회차가 올라오면 다음 회차가 생겨 다시 나옴
 //   - 회차 목록 전체(수천 행)를 받지 않고, 필요한 회차 한두 줄만 물어봄. 결과는 기기에 기억(기록이 바뀌면 다시)
 import { supabase, isOffline } from './supabase.js';
-import { novelReading, statusOf } from './progress.js';
+import { novelReading, statusOf, ts } from './progress.js';
 import { cachedChapters, countNewSince } from './novels.js';
 import { lastOpened } from './novelText.js';
 
@@ -17,7 +17,7 @@ const save = () => { try { localStorage.setItem(KEY, JSON.stringify(memo)); } ca
 export function latestOf(nid) {
   let best = null;
   for (const [key, r] of Object.entries(novelReading(nid))) {
-    if (!best || String(r.updated_at) > String(best.r.updated_at)) best = { key, r };
+    if (!best || ts(r.updated_at) > ts(best.r.updated_at)) best = { key, r };
   }
   return best;
 }

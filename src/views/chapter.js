@@ -7,8 +7,8 @@ import { errorMessage } from '../lib/supabase.js';
 import { navigate, goUp } from '../router.js';
 import { loadNovels, novelById, loadChapters, cachedChapters, fetchChapterText, prefetchChapter, chapterSortDesc, setChapterSortDesc } from '../lib/novels.js';
 import { splitParagraphs, chapterLabel, chapterNo, chapterNoLabel, chapterRest, chapterTitleLine, chapterTotal, findChapterByNo, lastOpened } from '../lib/novelText.js';
-import { loadReading, getReading, saveReading, statusOf, novelReading, isMine } from '../lib/progress.js';
-import { offerOtherDevice, closeOtherDevice, latestRow } from '../components/otherDevice.js';
+import { loadReading, getReading, saveReading, statusOf, novelReading, isOtherDevice, ts } from '../lib/progress.js';
+import { offerOtherDevice, closeOtherDevice } from '../components/otherDevice.js';
 import { getView, setView } from '../lib/view.js';
 import { wantAwake } from '../lib/wakeLock.js';
 import { applyReaderTheme, resetReaderTheme, appDark } from '../lib/readerTheme.js';
@@ -199,7 +199,7 @@ export function renderChapter(view, nid, key) {
   const goChapter = (c) => c && navigate(`/n/${encodeURIComponent(nid)}/${encodeURIComponent(c.key)}`, { replace: true });
 
   // 열 때의 가장 최근 기록 (그 뒤 서버에서 더 새 기록이 오면 "다른 기기" 알림)
-  const before = latestRow(novelReading(nid))?.r.updated_at || '';
+  const before = Math.max(0, ...Object.values(novelReading(nid)).map((r) => ts(r?.updated_at)));
   cleanups.push(closeOtherDevice);
 
   (async () => {
@@ -327,8 +327,13 @@ export function renderChapter(view, nid, key) {
       if (navigator.onLine) {
         loadReading({ maxAge: 15_000 }).then(() => {
           if (!alive) return;
-          const top = latestRow(novelReading(nid));
-          if (!top || String(top.r.updated_at) <= before || isMine(top.r)) return;
+          // 다른 기기가 연 뒤에 쓴 기록 중 가장 최근 (같은 시각이면 뒤 회차)
+          const order = (k) => chapters.findIndex((x) => x.key === k);
+          const others = Object.entries(novelReading(nid))
+            .filter(([, r]) => isOtherDevice(r) && ts(r.updated_at) > before)
+            .sort(([ka, a], [kb, b]) => ts(b.updated_at) - ts(a.updated_at) || order(kb) - order(ka));
+          if (!others.length) return;
+          const top = { k: others[0][0], r: others[0][1] };
           const c = chapters.find((x) => x.key === top.k);
           if (!c) return;
           const pct = Math.round((top.r.progress || 0) * 100);
